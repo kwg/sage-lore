@@ -17,7 +17,7 @@ pub struct InitArgs {
 }
 
 const DEFAULT_USER_CONFIG: &str = r#"# sage-lore user configuration
-# See: https://github.com/kai/sage-lore
+# Run 'sage-lore --help' for options
 
 llm:
   backend: claude
