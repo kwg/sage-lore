@@ -1,0 +1,7 @@
+// Minimal scroll to test backend wiring
+
+scroll "test-backends" {
+    description: "Minimal scroll to test backend wiring";
+
+    invoke(agent: "claude", instructions: "Say hello in exactly 3 words") -> greeting: map;
+}

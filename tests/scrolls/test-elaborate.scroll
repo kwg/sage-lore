@@ -1,0 +1,16 @@
+scroll: test-elaborate-production
+description: Test elaborate primitive with production backend
+
+requires:
+  input_text:
+    type: string
+    default: "Microservices architecture"
+
+steps:
+  - elaborate:
+      input: ${input_text}
+      depth: balanced
+      output_contract:
+        length: paragraph
+        format: prose
+    output: result

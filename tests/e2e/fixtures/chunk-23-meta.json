@@ -1,0 +1,6 @@
+{
+  "complexity": "low",
+  "files": [
+    "tests/cli_test.rs"
+  ]
+}

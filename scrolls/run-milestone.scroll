@@ -1,0 +1,43 @@
+// Execute milestone: loop over epics
+
+scroll "run-milestone" {
+    description: "Execute milestone: loop over epics";
+
+    require milestone: map;
+    require project_root: str = ".";
+    provide milestone_result: map;
+
+    // Extract epics from milestone using distill
+    distill(input: milestone, intensity: minimal) -> milestone_data: str;
+
+    // Execute each epic
+    set epic_results: map[] = for epic in milestone.epics {
+        // Create epic branch
+        vcs.branch(name: epic.branch) -> branch_result: map;
+
+        // Run epic using run-epic scroll
+        run(scroll_path: "run-epic.scroll", args: {
+            epic: epic,
+            project_root: project_root,
+        }) -> epic_result: map;
+
+        // Validate epic completion
+        validate(input: epic_result) {
+            criteria: ["All stories completed", "All tests passing"],
+        } -> epic_validation: map;
+
+        epic_result
+    };
+
+    // Merge milestone and epic results
+    aggregate(results: [milestone, epic_results], strategy: merge) -> merged_results: map;
+
+    // Slim summary context — pass counts and statuses, not full execution traces (#130)
+    set summary_context: str = "Milestone: {milestone.title}\nEpics completed: {epic_results}\nStatus: all epics executed";
+
+    invoke(agent: "summarizer", instructions: "Create a milestone completion summary") {
+        context: [summary_context],
+    } -> summary_raw: map;
+
+    convert(input: summary_raw, to: "json") -> milestone_result: map;
+}

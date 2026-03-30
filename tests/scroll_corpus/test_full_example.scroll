@@ -1,0 +1,36 @@
+// Full translation of story-from-forgejo (the spec's reference example)
+type ChunkExtraction {
+    chunk_numbers: int[],
+}
+
+type Story {
+    number: int,
+    title: str,
+    epic_title: str,
+    body: str,
+    chunk_numbers: int[],
+}
+
+scroll "story-from-forgejo" {
+    description: "Adapter: Fetch Forgejo story and return story metadata";
+
+    require story_number: int;
+    require epic_title: str;
+    provide story: Story;
+
+    platform.get_issue(number: story_number) -> raw_issue: map;
+
+    invoke(agent: "platform-interpreter", instructions: "Extract chunk issue numbers") {
+        context: [raw_issue.body],
+        schema: ChunkExtraction,
+        tier: cheap,
+    } -> extraction: ChunkExtraction;
+
+    story = Story {
+        number: raw_issue.number,
+        title: raw_issue.title,
+        epic_title: epic_title,
+        body: raw_issue.body,
+        chunk_numbers: extraction.chunk_numbers,
+    };
+}

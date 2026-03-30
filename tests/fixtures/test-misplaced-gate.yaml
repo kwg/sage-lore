@@ -1,0 +1,45 @@
+# Test fixture: Scroll with Gate 2 OUTSIDE loop (structural violation)
+# Expected: exit code 2 (GATE 2 MISPLACED error)
+
+scroll: test-misplaced-gate
+description: "Test scroll with Gate 2 outside the implementation loop"
+
+steps:
+  - transform: { input: state_file, schema: current_story, output: story }
+
+  # Gate 1: Correct placement
+  - secure:
+      input: story.dependencies
+      scan_type: [dependency_cve, allowlist]
+      policy: block
+
+  # Task loop with implementer
+  - loop:
+      items: story.tasks
+      operation:
+        - invoke:
+            agent: implementer
+            context: [task]
+            output: impl_result
+
+        # MISSING: Gate 2 should be HERE, inside the loop
+        # But it's placed outside below...
+
+        - validate:
+            input: test_results
+            criteria: all_pass
+
+  # WRONG: Gate 2 placed OUTSIDE loop - structural violation
+  - secure:
+      input: impl_result.files
+      scan_type: [secret_detection, static_analysis]
+      policy: block
+
+  # Gate 3: Correct placement
+  - secure:
+      input: git.staged_diff
+      scan_type: [secret_detection, sensitive_paths]
+      policy: block
+
+  - invoke: { interface: git.commit }
+  - checkpoint: { label: story_complete, state: story }

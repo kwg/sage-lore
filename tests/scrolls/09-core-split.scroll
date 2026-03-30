@@ -1,0 +1,15 @@
+scroll: core-split-test
+description: "Test for split primitive - break content into parts"
+
+requires:
+  input_text:
+    type: string
+    description: "Text to split"
+    default: "Build a REST API with user auth, data storage, and API docs"
+
+steps:
+  - split:
+      input: ${input_text}
+      by: semantic
+      granularity: coarse
+    output: split_parts

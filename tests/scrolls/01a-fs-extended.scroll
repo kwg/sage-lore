@@ -1,0 +1,66 @@
+scroll: fs-extended-test
+description: "Test extended FS operations - append, mkdir, stat, copy, move"
+
+steps:
+  # 1. Create a directory
+  - fs:
+      operation: mkdir
+      path: .test-output/fs-extended
+    output: mkdir_result
+
+  # 2. Write initial file
+  - fs:
+      operation: write
+      path: .test-output/fs-extended/test.txt
+      content: "Line 1\n"
+    output: write_result
+
+  # 3. Append to file
+  - fs:
+      operation: append
+      path: .test-output/fs-extended/test.txt
+      content: "Line 2\n"
+    output: append_result
+
+  # 4. Stat the file
+  - fs:
+      operation: stat
+      path: .test-output/fs-extended/test.txt
+    output: stat_result
+
+  # 5. Copy the file
+  - fs:
+      operation: copy
+      path: .test-output/fs-extended/test.txt
+      dest: .test-output/fs-extended/test-copy.txt
+    output: copy_result
+
+  # 6. Move/rename the copy
+  - fs:
+      operation: move
+      path: .test-output/fs-extended/test-copy.txt
+      dest: .test-output/fs-extended/test-moved.txt
+    output: move_result
+
+  # 7. List to verify
+  - fs:
+      operation: list
+      path: .test-output/fs-extended
+    output: listing
+
+  # 8. Read appended content
+  - fs:
+      operation: read
+      path: .test-output/fs-extended/test.txt
+    output: final_content
+
+  # 9. Clean up files
+  - fs:
+      operation: delete
+      path: .test-output/fs-extended/test.txt
+    output: delete1
+
+  - fs:
+      operation: delete
+      path: .test-output/fs-extended/test-moved.txt
+    output: delete2

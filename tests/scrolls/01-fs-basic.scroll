@@ -1,0 +1,36 @@
+scroll: fs-basic-test
+description: "Minimal test for fs primitive - write, read, exists, delete"
+
+# No requires - this is self-contained
+
+steps:
+  # 1. Write a test file
+  - fs:
+      operation: write
+      path: .test-output/fs-test.txt
+      content: "Hello from fs primitive test"
+    output: write_result
+
+  # 2. Verify it exists
+  - fs:
+      operation: exists
+      path: .test-output/fs-test.txt
+    output: exists_check
+
+  # 3. Read it back
+  - fs:
+      operation: read
+      path: .test-output/fs-test.txt
+    output: read_content
+
+  # 4. List the directory
+  - fs:
+      operation: list
+      path: .test-output
+    output: dir_listing
+
+  # 5. Clean up
+  - fs:
+      operation: delete
+      path: .test-output/fs-test.txt
+    output: delete_result

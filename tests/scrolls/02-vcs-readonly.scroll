@@ -1,0 +1,24 @@
+scroll: vcs-readonly-test
+description: "Minimal test for vcs primitive - read-only operations"
+
+# No requires - reads from current repo state
+# Uses on_fail: continue for testing without real git backend
+
+steps:
+  # 1. Get status
+  - vcs:
+      operation: status
+    output: git_status
+    on_fail: continue
+
+  # 2. Get diff (should be empty on clean tree)
+  - vcs:
+      operation: diff
+    output: git_diff
+    on_fail: continue
+
+  # 3. Get recent log
+  - vcs:
+      operation: log
+    output: git_log
+    on_fail: continue

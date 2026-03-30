@@ -1,0 +1,36 @@
+scroll: test-ops-test
+description: "Test all test primitive operations"
+
+steps:
+  # 1. Run smoke tests (quick subset)
+  - test:
+      operation: smoke
+    output: smoke_results
+    on_fail: continue
+
+  # 2. Run filtered tests
+  - test:
+      operation: run_filtered
+      pattern: "schema"
+    output: filtered_results
+    on_fail: continue
+
+  # 3. Run specific files
+  - test:
+      operation: run_files
+      files:
+        - tests/schema_serde_roundtrip.rs
+    output: file_results
+    on_fail: continue
+
+  # 4. Get test framework info
+  - test:
+      operation: info
+    output: test_info
+    on_fail: continue
+
+  # 5. Run coverage (if supported)
+  - test:
+      operation: coverage
+    output: coverage_results
+    on_fail: continue

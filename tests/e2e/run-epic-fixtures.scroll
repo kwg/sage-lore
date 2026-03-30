@@ -1,0 +1,27 @@
+// Execute an epic using fixture adapters (no Forgejo)
+
+scroll "run-epic-fixtures" {
+    description: "Execute an epic: fetch stories from fixtures and run them";
+
+    require epic: map;
+    require project_root: str = ".";
+    provide epic_result: map;
+
+    // story_numbers comes from the fixture adapter as a clean int array [2, 3, 4]
+    set story_results: map[] = for story_number in epic.story_numbers {
+        // Fetch story from fixtures
+        run(scroll_path: "adapters/story-from-fixtures.scroll", args: {
+            story_number: story_number,
+            epic_title: epic.title,
+        }) -> story_adapter_result: map;
+
+        // Execute the story (uses fixture chunk adapter)
+        run(scroll_path: "run-story.scroll", args: {
+            project_root: project_root,
+        }) -> story_result: map;
+
+        story_result
+    };
+
+    aggregate(results: [epic, story_results], strategy: merge) -> epic_result: map;
+}

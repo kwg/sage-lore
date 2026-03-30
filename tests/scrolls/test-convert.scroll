@@ -1,0 +1,32 @@
+scroll: test-convert-production
+description: Test convert primitive with production backend
+
+requires:
+  input_text:
+    type: string
+    default: |
+      Name: John Smith
+      Age: 30
+      City: New York
+      Occupation: Software Engineer
+
+steps:
+  - convert:
+      input: ${input_text}
+      to:
+        format: json
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+            age:
+              type: integer
+            city:
+              type: string
+            occupation:
+              type: string
+          required:
+            - name
+            - age
+    output: result

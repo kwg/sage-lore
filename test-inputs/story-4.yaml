@@ -1,0 +1,84 @@
+# Story #4 from sage-dice - CLI Foundation
+number: 4
+title: "CLI Foundation"
+body: |
+  Create the command-line interface for sage-dice using clap.
+  
+  ## Acceptance Criteria
+  - CLI accepts dice expressions or natural language
+  - Supports --notation, --seed, --json flags
+  - Help and version display correctly
+epic_title: "Core Infrastructure"
+chunks:
+  - title: "cli-foundation-clap-parser"
+    number: 20
+    complexity: "low"
+    files:
+      - "src/cli.rs"
+      - "src/lib.rs"
+      - "Cargo.toml"
+    spec: |
+      ## Overview
+
+      Create the CLI module using clap for argument parsing. This provides the command-line interface for sage-dice with support for:
+      - Natural language input (default)
+      - Direct notation mode (`--notation` flag)
+      - Deterministic rolling (`--seed` flag)
+      - JSON output mode (`--json` flag)
+      - Help and version information
+
+      ## Implementation
+
+      Create `src/cli.rs` with the Cli struct using clap derive:
+
+      ```rust
+      use clap::Parser;
+
+      #[derive(Parser, Debug)]
+      #[command(name = "sage-dice")]
+      #[command(version = "0.1.0")]
+      #[command(about = "Roll dice using notation or natural language")]
+      pub struct Cli {
+          /// The dice expression or natural language query
+          #[arg(required_unless_present = "help")]
+          pub input: Option<String>,
+
+          /// Use direct notation (bypass LLM)
+          #[arg(short, long)]
+          pub notation: bool,
+
+          /// Seed for deterministic rolls (for testing)
+          #[arg(short, long)]
+          pub seed: Option<u64>,
+
+          /// Output as JSON for scripting
+          #[arg(short, long)]
+          pub json: bool,
+      }
+
+      impl Cli {
+          pub fn parse_args() -> Self {
+              Cli::parse()
+          }
+      }
+      ```
+
+      Update `src/lib.rs` to export the cli module:
+      ```rust
+      pub mod cli;
+      ```
+
+      ## Cargo.toml Changes
+
+      Add to `[dependencies]` section:
+      ```toml
+      clap = { version = "4.5", features = ["derive"] }
+      ```
+
+      ## Success Criteria
+
+      - `cargo build` succeeds
+      - `cargo run -- --help` shows the help message
+      - `cargo run -- --version` shows version 0.1.0
+      - All flags can be combined without errors
+    parent_story: "4"

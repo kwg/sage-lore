@@ -1,0 +1,89 @@
+// Adversarial code review with configurable depth (quick/standard/thorough)
+
+scroll "code-review" {
+    description: "Adversarial code review with configurable depth (quick/standard/thorough)";
+
+    require depth: str = "standard";
+    require files: str[];
+    require ctx: map;
+    provide review_result: map;
+
+    // === DEPTH: QUICK ===
+    // After each task - implementation focus, max 3 total reviews
+    if depth == "quick" {
+        // Quick implementation-focused review
+        invoke(agent: "adversarial_reviewer", instructions: "Quick review — minimum 1 finding required") {
+            context: [files, ctx],
+        } -> quick_findings: map;
+
+        // Validate minimum findings (adversarial requirement)
+        validate(input: quick_findings) {
+            criteria: ["At least 1 finding identified"],
+            mode: strict,
+        } -> findings_check: map;
+
+        convert(input: quick_findings, to: "json") -> review_result: map;
+    };
+
+    // === DEPTH: STANDARD ===
+    // Before commit - git cross-ref, AC validation, min 3 findings
+    if depth == "standard" {
+        // Standard review with acceptance criteria validation
+        invoke(agent: "adversarial_reviewer", instructions: "Standard review with AC validation — minimum 3 findings required") {
+            context: [files, ctx],
+        } -> standard_findings: map;
+
+        // Enforce minimum findings
+        validate(input: standard_findings) {
+            criteria: ["At least 3 findings identified"],
+            mode: strict,
+        } -> findings_check: map;
+
+        // Validate against git reality
+        vcs.diff(scope: "staged") -> git_diff: str;
+
+        validate(input: standard_findings) {
+            criteria: ["Findings reference actual changed files", "No hallucinated changes"],
+            mode: strict,
+        } -> git_validation: map;
+
+        // Run tests and validate
+        test.run() -> test_results: map;
+
+        validate(input: test_results) {
+            criteria: ["All tests pass"],
+            mode: strict,
+        } -> test_validation: map;
+
+        convert(input: standard_findings, to: "json") -> review_result: map;
+    };
+
+    // === DEPTH: THOROUGH ===
+    // Before PR/merge - architecture compliance, ALL security scans
+    if depth == "thorough" {
+        // Full security gate - all scan types
+        // secure: secret_detection, policy: block (no Assembly equivalent yet)
+        // secure: dependency_cve, policy: audit (no Assembly equivalent yet)
+        // secure: static_analysis, policy: audit (no Assembly equivalent yet)
+
+        // Thorough review with architecture validation
+        invoke(agent: "adversarial_reviewer", instructions: "Thorough architectural review — minimum 5 findings required") {
+            context: [files, ctx],
+        } -> thorough_findings: map;
+
+        // Enforce minimum findings for thorough review
+        validate(input: thorough_findings) {
+            criteria: ["At least 5 findings identified"],
+            mode: strict,
+        } -> findings_check: map;
+
+        convert(input: thorough_findings, to: "json") -> review_result: map;
+    };
+
+    // === COMMON VALIDATION ===
+    // Ensure review_result was set by one of the branches
+    validate(input: review_result) {
+        criteria: ["Review result exists", "Has findings or approval"],
+        mode: strict,
+    } -> final_validation: map;
+}

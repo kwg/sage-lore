@@ -1,0 +1,21 @@
+// Basic scroll structure with types, require, provide
+type Story {
+    number: int,
+    title: str,
+    body: str,
+}
+
+scroll "basic-test" {
+    description: "A basic test scroll";
+
+    require story_number: int;
+    provide story: Story;
+
+    platform.get_issue(number: story_number) -> raw_issue: map;
+
+    story = Story {
+        number: raw_issue.number,
+        title: raw_issue.title,
+        body: raw_issue.body,
+    };
+}

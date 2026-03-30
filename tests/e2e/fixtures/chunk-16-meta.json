@@ -1,0 +1,9 @@
+{
+  "complexity": "low",
+  "files": [
+    "src/output.rs",
+    "src/main.rs",
+    "src/lib.rs",
+    "Cargo.toml"
+  ]
+}

@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: MIT
+# Example scroll demonstrating platform primitive usage
+
+metadata:
+  name: platform-demo
+  description: Demonstrates platform primitive operations
+  version: 1.0.0
+
+steps:
+  # Get an environment variable
+  - platform:
+      operation: env
+      var: PATH
+    output: path_value
+
+  # Get platform information
+  - platform:
+      operation: info
+    output: platform_info
+
+  # Check if a command is available
+  - platform:
+      operation: check
+      command: cargo
+    output: cargo_available
+
+  # Check for a command that might not exist
+  - platform:
+      operation: check
+      command: nonexistent_tool
+    output: tool_check
+    on_fail: continue

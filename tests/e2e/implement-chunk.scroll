@@ -1,0 +1,44 @@
+// Generate implementation for a code chunk (SMART-E worker scroll)
+//
+// This scroll is called by run-story.scroll.
+// It handles the LLM work: invoke -> validate -> convert.
+// The chunk spec IS the implementation plan — no elaboration needed.
+
+scroll "implement-chunk" {
+    description: "Generate implementation for a code chunk (SMART-E worker scroll)";
+
+    require chunk: map;
+    require project_root: str = ".";
+    provide implementation: map;
+
+    // Step 1: Execute implementation using LLM with the chunk spec directly
+    // The chunk spec is the terminal artifact — it contains everything needed.
+    // No elaboration step: elaborating a complete spec is lossy, not additive.
+    invoke(agent: "dev", instructions: "Implement chunk {chunk.number}: {chunk.title}") {
+        context: [chunk, project_root],
+        timeout: 600,
+    } -> raw_implementation: map;
+
+    // Step 2: Validate implementation against chunk spec (semantic check)
+    validate(input: raw_implementation, reference: chunk) {
+        criteria: [
+            "Implementation matches chunk.spec requirements",
+            "All files listed in chunk.files are created or modified",
+            "File paths match those specified in chunk.files",
+            "Code follows project conventions",
+            "Tests are included and documented",
+        ],
+        mode: strict,
+    } -> validation: map | continue;
+
+    // Step 3: Parse implementation output with schema validation
+    convert(input: raw_implementation, to: "json", schema: {
+        type: "object",
+        required: ["files", "summary"],
+        properties: {
+            files: { type: "array", items: { type: "object", required: ["path", "content"] } },
+            summary: { type: "string" },
+            tests_added: { type: "array", items: { type: "string" } },
+        },
+    }) -> implementation: map;
+}

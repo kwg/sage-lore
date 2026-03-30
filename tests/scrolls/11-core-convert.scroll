@@ -1,0 +1,30 @@
+scroll: core-convert-test
+description: "Test for convert primitive - convert format with JSON schema"
+
+requires:
+  input_data:
+    type: string
+    description: "Data to convert"
+    default: |
+      Project: test-project
+      Version: 1.0.0
+      Dependencies: serde, tokio
+
+steps:
+  - convert:
+      input: ${input_data}
+      to:
+        format: json
+        schema:
+          type: object
+          properties:
+            project_name:
+              type: string
+            version_number:
+              type: string
+            dep_count:
+              type: integer
+          required:
+            - project_name
+            - version_number
+    output: converted_result

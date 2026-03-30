@@ -1,0 +1,33 @@
+// String features: interpolation, raw, multiline, escapes
+scroll "string-test" {
+    description: "Tests string features";
+
+    require name: str;
+    require count: int;
+    provide output: str;
+
+    // Simple interpolation
+    set greeting: str = "Hello {name}!";
+
+    // Multiple interpolations
+    set msg: str = "User {name} has {count} items";
+
+    // Field access in interpolation
+    set data: map = { title: "Test" };
+    set label: str = "Title: {data.title}";
+
+    // Escape sequences
+    set escaped: str = "Line one\nLine two\ttabbed";
+    set quoted: str = "She said \"hello\"";
+    set braces: str = "Literal \{braces\}";
+
+    // Raw string (no interpolation)
+    set raw: str = `This has literal {braces} and no interpolation`;
+
+    // Multiline string
+    set multi: str = "Line one
+Line two
+Line three";
+
+    set output: str = greeting;
+}

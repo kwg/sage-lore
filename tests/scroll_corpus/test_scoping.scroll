@@ -1,0 +1,46 @@
+// Scoping: block scope, scroll scope, loop iteration scope
+scroll "scoping-test" {
+    description: "Tests scoping rules";
+
+    require input: int;
+    provide output: int;
+
+    // Scroll-level variable
+    set total: int = 0;
+
+    // Block scope — x dies at }
+    if input > 0 {
+        set x: int = 5;
+        total = total + x;
+    };
+    // x is NOT visible here
+
+    // Loop iteration scope — result dies each iteration
+    for i in [1, 2, 3] {
+        set temp: int = i + 1;
+        total = total + temp;
+    };
+    // temp is NOT visible here
+
+    // While loop scope
+    set counter: int = 0;
+    while counter < 3 {
+        set inner: int = counter + 10;
+        total = total + inner;
+        counter += 1;
+    };
+    // inner is NOT visible here
+
+    // Nested scopes
+    if input > 5 {
+        set a: int = 1;
+        if input > 10 {
+            set b: int = 2;
+            total = total + a + b;
+        };
+        // b is NOT visible here
+        total = total + a;
+    };
+
+    set output: int = total;
+}

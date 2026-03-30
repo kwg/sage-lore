@@ -1,0 +1,7 @@
+// Unclosed brace in scroll block
+type Foo { x: int, }
+scroll "bad" {
+    description: "Should fail";
+    require x: int;
+    provide y: int;
+    set y: int = 5;

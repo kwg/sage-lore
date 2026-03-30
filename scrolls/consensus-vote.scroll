@@ -1,0 +1,33 @@
+// Example demonstrating the consensus primitive for multi-agent voting
+
+scroll "consensus-vote-example" {
+    description: "Example demonstrating the consensus primitive for multi-agent voting";
+
+    // Simple majority vote on a technical decision
+    consensus(mechanism: "vote", threshold: majority) {
+        agents: ["architect", "developer", "devops"],
+        proposal: "Should we adopt microservices architecture for the new system?",
+        options: ["yes", "no", "abstain"],
+    } -> architecture_decision: map;
+
+    // Supermajority vote for critical security change
+    consensus(mechanism: "vote", threshold: supermajority) {
+        agents: ["security_lead", "architect", "tech_lead", "developer1", "developer2"],
+        proposal: "Approve migration to zero-trust security model?",
+        options: ["approve", "reject", "defer"],
+    } -> security_decision: map;
+
+    // Numeric threshold - requires at least 3 votes
+    consensus(mechanism: "vote", threshold: 3) {
+        agents: ["reviewer1", "reviewer2", "reviewer3", "reviewer4", "reviewer5"],
+        proposal: "Merge pull request #312 implementing consensus primitive?",
+        options: ["approve", "request_changes", "comment"],
+    } -> pr_review_decision: map;
+
+    // Unanimous decision for breaking changes
+    consensus(mechanism: "vote", threshold: unanimous) {
+        agents: ["tech_lead", "architect", "product_owner"],
+        proposal: "Proceed with breaking API changes in v2.0?",
+        options: ["proceed", "postpone"],
+    } -> breaking_change_decision: map;
+}

@@ -1,0 +1,7 @@
+{
+  "complexity": "low",
+  "files": [
+    "src/cli.rs",
+    "src/lib.rs"
+  ]
+}

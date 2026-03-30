@@ -1,0 +1,28 @@
+scroll: core-distill-test
+description: "Test for distill primitive - reduce content with intensity control"
+
+requires:
+  input_text:
+    type: string
+    description: "Text to distill"
+    default: |
+      Software development best practices encompass a wide range of methodologies and techniques
+      that help teams deliver high-quality code efficiently. Test-driven development (TDD) is one
+      such approach where developers write tests before implementing features, ensuring that code
+      meets requirements from the start. Code reviews are another critical practice, allowing team
+      members to catch bugs early and share knowledge across the team. Continuous integration and
+      continuous deployment (CI/CD) pipelines automate the building, testing, and deployment of
+      applications, reducing manual errors and speeding up release cycles. Documentation, while
+      often overlooked, plays a vital role in maintaining codebases over time, helping new team
+      members understand existing systems and reducing the cognitive load on experienced developers.
+      Clean code principles, such as meaningful variable names, small functions, and single
+      responsibility, make code more readable and maintainable for future development efforts.
+
+steps:
+  - distill:
+      input: ${input_text}
+      intensity: aggressive
+      output_contract:
+        length: sentence
+        format: prose
+    output: distilled_result

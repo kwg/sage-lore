@@ -1,0 +1,44 @@
+// Decompose a story into small, single-focus implementation chunks
+// and create Forgejo issues.
+//
+// Design constraint: each chunk should be implementable by a
+// local LLM (27B params) in a single pass — max ~100 lines of
+// code output across 1-2 files.
+
+scroll "create-chunks" {
+    description: "Decompose a story into small, single-focus implementation chunks and create Forgejo issues";
+
+    require story_number: int;
+    provide created_issues: map[];
+
+    // 1. Fetch the story from Forgejo
+    platform.get_issue(number: story_number) -> story_issue: map;
+
+    // 2. Decompose the story into implementation chunks using LLM
+    invoke(agent: "chunk-decomposer", instructions: "Decompose story '{story_issue.title}' into implementation chunks") {
+        context: [story_issue.body],
+        timeout: 300,
+    } -> raw_chunks: map;
+
+    // 3. Parse the JSON response (no schema validation — just parse)
+    convert(input: raw_chunks, to: "json") -> decomposition: map;
+
+    // 4. Validate chunk quality
+    validate(input: decomposition.chunks) {
+        criteria: [
+            "Each chunk has complexity of low or medium, never high",
+            "Each chunk touches at most 2 files",
+            "Each chunk has a non-empty spec with implementation details",
+            "Chunks are ordered by dependency (no forward references)",
+        ],
+        mode: strict,
+    } -> chunk_validation: map | continue;
+
+    // 5. Create Forgejo issues for each chunk
+    set created_issues: map[] = for chunk in decomposition.chunks {
+        // Create the issue with chunk details
+        set issue_body: str = "## Parent Story\n#{story_number}\n\n## Complexity\n{chunk.complexity}\n\n## Files\n{chunk.files}\n\n## Spec\n{chunk.spec}";
+        platform.create_issue(title: chunk.title, body: issue_body) -> created_issue: map;
+        created_issue
+    };
+}

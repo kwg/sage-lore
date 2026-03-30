@@ -1,0 +1,6 @@
+{
+  "complexity": "medium",
+  "files": [
+    "tests/nlp_test.rs"
+  ]
+}

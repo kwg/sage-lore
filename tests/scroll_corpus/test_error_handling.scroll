@@ -1,0 +1,50 @@
+// Error handling chains: continue, retry, fallback
+type Review {
+    passed: bool,
+    notes: str,
+}
+
+scroll "error-handling-test" {
+    description: "Tests error handling chains";
+
+    require issue_number: int;
+    provide result: str;
+
+    // Default (halt on failure)
+    platform.get_issue(number: issue_number) -> raw_issue: map;
+
+    // Continue on failure (null)
+    invoke(agent: "reviewer", instructions: "Review") {
+        schema: Review,
+    } -> review: Review | continue;
+
+    // Retry then halt
+    invoke(agent: "dev", instructions: "Implement") {
+        schema: Review,
+    } -> impl_result: Review | retry(3);
+
+    // Retry then continue
+    invoke(agent: "dev", instructions: "Implement again") {
+        schema: Review,
+    } -> impl_result_2: Review | retry(3) | continue;
+
+    // Retry then fallback
+    invoke(agent: "dev", instructions: "Implement with fallback") {
+        schema: Review,
+    } -> impl_result_3: Review | retry(2) | fallback {
+        set default_review: Review = Review {
+            passed: false,
+            notes: "Fallback review",
+        };
+        default_review
+    };
+
+    // Fallback immediately
+    invoke(agent: "dev", instructions: "Quick try") {
+        schema: Review,
+    } -> quick_result: Review | fallback {
+        Review { passed: true, notes: "Immediate fallback" }
+    };
+
+    set result: str = "done";
+}

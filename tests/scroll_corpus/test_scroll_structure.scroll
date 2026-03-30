@@ -1,0 +1,45 @@
+// Scroll structure: require/provide with inline struct defs and references
+type ExternalType {
+    id: int,
+    name: str,
+}
+
+scroll "scroll-structure-test" {
+    description: "Tests scroll header features";
+
+    // Reference existing type
+    require external: ExternalType;
+
+    // Primitive type
+    require count: int;
+
+    // Array type
+    require items: str[];
+
+    // Nullable type
+    require maybe_name: str?;
+
+    // Default value
+    require threshold: int = 10;
+
+    // Provide with referenced type
+    provide result: ExternalType;
+
+    // Provide with inline struct definition
+    provide summary: Summary {
+        total: int,
+        items_processed: int,
+        notes: str,
+    };
+
+    set result: ExternalType = ExternalType {
+        id: count,
+        name: "test",
+    };
+
+    set summary: Summary = Summary {
+        total: count,
+        items_processed: 0,
+        notes: "done",
+    };
+}

@@ -1,0 +1,19 @@
+// Sub-scroll calls with typed returns
+type Story {
+    number: int,
+    title: str,
+}
+
+scroll "run-test" {
+    description: "Tests sub-scroll invocation";
+
+    require story_number: int;
+    require epic_title: str;
+    provide story: Story;
+
+    // Simple sub-scroll call
+    run("adapters/story-from-forgejo") {
+        story_number: story_number,
+        epic_title: epic_title,
+    } -> story: Story;
+}

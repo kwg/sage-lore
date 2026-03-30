@@ -1,0 +1,21 @@
+scroll: vcs-remote-ops-test
+description: "Test VCS remote operations"
+
+steps:
+  # 1. Push (may fail without remote)
+  - vcs:
+      operation: push
+    output: push_result
+    on_fail: continue
+
+  # 2. Get status (always works)
+  - vcs:
+      operation: status
+    output: status_check
+
+  # 3. Get diff
+  - vcs:
+      operation: diff
+      scope: staged
+    output: diff_result
+    on_fail: continue

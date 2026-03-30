@@ -1,0 +1,101 @@
+{
+  "Scroll Template": {
+    "prefix": "scroll",
+    "body": [
+      "scroll \"${1:name}\" {",
+      "    description: \"${2:description}\";",
+      "",
+      "    require ${3:input}: ${4:type};",
+      "    provide ${5:output}: ${6:type};",
+      "",
+      "    $0",
+      "}"
+    ],
+    "description": "New scroll definition"
+  },
+  "Type Struct": {
+    "prefix": "type-struct",
+    "body": [
+      "type ${1:Name} {",
+      "    ${2:field}: ${3:type},",
+      "}"
+    ],
+    "description": "Struct type definition"
+  },
+  "Type Enum": {
+    "prefix": "type-enum",
+    "body": [
+      "type ${1:Name} { ${2:variant1}, ${3:variant2}, ${4:variant3} }"
+    ],
+    "description": "Enum type definition"
+  },
+  "Invoke": {
+    "prefix": "invoke",
+    "body": [
+      "invoke(agent: \"${1:agent}\", instructions: \"${2:instructions}\") {",
+      "    context: [${3}],",
+      "    schema: ${4:OutputType},",
+      "    tier: ${5|cheap,standard,premium|},",
+      "} -> ${6:result}: ${7:Type};"
+    ],
+    "description": "Invoke agent"
+  },
+  "Platform Get Issue": {
+    "prefix": "platform-get",
+    "body": [
+      "platform.get_issue(number: ${1:issue_number}) -> ${2:raw_issue}: map;"
+    ],
+    "description": "Fetch issue from Forgejo"
+  },
+  "For Expression": {
+    "prefix": "for-expr",
+    "body": [
+      "set ${1:results}: ${2:Type}[] = for ${3:item} in ${4:collection} {",
+      "    $0",
+      "    ${3}",
+      "};"
+    ],
+    "description": "For loop as expression (returns array)"
+  },
+  "If Expression": {
+    "prefix": "if-expr",
+    "body": [
+      "set ${1:result}: ${2:type} = if ${3:condition} { ${4:value} } else { ${5:default} };"
+    ],
+    "description": "If/else as expression"
+  },
+  "Match Expression": {
+    "prefix": "match-expr",
+    "body": [
+      "set ${1:result}: ${2:type} = match ${3:target} {",
+      "    ${4:Pattern}.${5:variant} => ${6:value},",
+      "};"
+    ],
+    "description": "Match as expression"
+  },
+  "Error Chain": {
+    "prefix": "error-chain",
+    "body": [
+      "-> ${1:result}: ${2:Type} | ${3|continue,retry(3),fallback \\{ $0 \\}|};"
+    ],
+    "description": "Binding with error handling"
+  },
+  "Run Sub-scroll": {
+    "prefix": "run",
+    "body": [
+      "run(scroll_path: \"${1:path}\", args: {",
+      "    ${2:key}: ${3:value},",
+      "}) -> ${4:result}: map;"
+    ],
+    "description": "Run a sub-scroll"
+  },
+  "Concurrent Block": {
+    "prefix": "concurrent",
+    "body": [
+      "concurrent {",
+      "    $0",
+      "};"
+    ],
+    "description": "Concurrent execution block"
+  }
+}

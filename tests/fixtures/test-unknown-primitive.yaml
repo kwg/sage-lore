@@ -1,0 +1,10 @@
+# Test fixture: Scroll with unknown primitive
+# Expected: exit code 0 (warning only), but 1 with --strict
+
+scroll: test-unknown
+description: "Test scroll with unknown primitive name"
+
+steps:
+  - transform: { input: x, schema: y, output: z }
+  - typo_transform: { input: a, schema: b }
+  - checkpoint: { label: done, state: z }

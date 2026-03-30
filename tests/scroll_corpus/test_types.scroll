@@ -1,0 +1,41 @@
+// All type features: struct, enum, primitives, arrays, nullable
+type File {
+    path: str,
+    content: str,
+}
+
+type Implementation {
+    files: File[],
+    summary: str,
+    tests_added: str[],
+}
+
+type Complexity { low, medium, high }
+
+type Status { open, closed, merged }
+
+type Tier { cheap, standard, premium }
+
+type NullableExample {
+    name: str,
+    maybe_value: str?,
+    items: int[]?,
+}
+
+scroll "type-test" {
+    description: "Tests all type definitions";
+
+    require input: str;
+    provide result: map;
+
+    set count: int = 0;
+    set name: str = "hello";
+    set ratio: float = 3.14;
+    set active: bool = true;
+    set nothing: str? = null;
+    set names: str[] = ["alice", "bob"];
+    set scores: int[] = [95, 87, 92];
+    set config: map = { key: "value", nested: "data" };
+
+    result = { status: "ok" };
+}

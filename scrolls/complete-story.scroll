@@ -1,0 +1,39 @@
+// Finalize story: verify tests, commit, update platform status
+
+scroll "complete-story" {
+    description: "Finalize story: verify tests, commit, update platform status";
+
+    require story: map;
+    require project_root: str = ".";
+    require branch_name: str;
+    provide completion_result: map;
+
+    // Verify all tests pass before completion
+    test.run() -> test_results: map;
+
+    validate(input: test_results) {
+        criteria: ["All tests pass", "No failing tests"],
+        mode: strict,
+    } -> test_validation: map;
+
+    // Get current VCS status
+    vcs.status() -> vcs_status: map;
+
+    // Stage all changes
+    vcs.add() -> add_result: map;
+
+    // Create completion commit
+    vcs.commit(message: "Complete story {story.number}: {story.title}") -> commit_result: map;
+
+    // Push to remote
+    vcs.push() -> push_result: map;
+
+    // Add completion comment to issue
+    platform.create_comment(number: story.number, body: "Story completed and pushed to {branch_name}. Commit: {commit_result.hash}") -> comment_result: map;
+
+    // Close the issue
+    platform.close_issue(number: story.number) -> close_result: map;
+
+    // Build completion summary
+    aggregate(results: [story, commit_result, push_result], strategy: merge) -> completion_result: map;
+}

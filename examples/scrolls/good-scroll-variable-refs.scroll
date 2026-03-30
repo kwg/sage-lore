@@ -1,0 +1,9 @@
+// Example: This scroll should be ACCEPTED (uses variable references, no secrets)
+// Used to demonstrate secret pattern validation (Story D3c)
+// Proper variable interpolation: {variable} instead of hardcoded values
+
+scroll "good-scroll" {
+    description: "Example scroll with safe variable references";
+
+    invoke(agent: "claude", instructions: "Process the data") -> result: map;
+}

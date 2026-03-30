@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language SYSTEM "language.dtd">
+<!--
+  Kate/KSyntaxHighlighting definition for Scroll Assembly language.
+  Install: copy to ~/.local/share/org.kde.syntax-highlighting/syntax/
+-->
+<language name="Scroll Assembly" section="Scripts" extensions="*.scroll"
+          version="1" kateversion="5.0" author="SAGE Method" license="MIT">
+
+  <highlighting>
+    <list name="keywords">
+      <item>scroll</item>
+      <item>type</item>
+      <item>require</item>
+      <item>provide</item>
+      <item>description</item>
+      <item>set</item>
+    </list>
+
+    <list name="control">
+      <item>if</item>
+      <item>else</item>
+      <item>for</item>
+      <item>in</item>
+      <item>while</item>
+      <item>match</item>
+      <item>break</item>
+      <item>concurrent</item>
+    </list>
+
+    <list name="error-handling">
+      <item>continue</item>
+      <item>retry</item>
+      <item>fallback</item>
+    </list>
+
+    <list name="primitives">
+      <item>invoke</item>
+      <item>parallel</item>
+      <item>consensus</item>
+      <item>run</item>
+      <item>elaborate</item>
+      <item>distill</item>
+      <item>validate</item>
+      <item>convert</item>
+      <item>aggregate</item>
+    </list>
+
+    <list name="types">
+      <item>str</item>
+      <item>int</item>
+      <item>float</item>
+      <item>bool</item>
+      <item>map</item>
+    </list>
+
+    <list name="constants">
+      <item>true</item>
+      <item>false</item>
+      <item>null</item>
+    </list>
+
+    <list name="namespaces">
+      <item>platform</item>
+      <item>fs</item>
+      <item>vcs</item>
+      <item>test</item>
+    </list>
+
+    <contexts>
+      <context name="Normal" attribute="Normal Text" lineEndContext="#stay">
+        <DetectSpaces/>
+        <keyword attribute="Keyword" context="#stay" String="keywords"/>
+        <keyword attribute="Control Flow" context="#stay" String="control"/>
+        <keyword attribute="Error Handling" context="#stay" String="error-handling"/>
+        <keyword attribute="Function" context="#stay" String="primitives"/>
+        <keyword attribute="Data Type" context="#stay" String="types"/>
+        <keyword attribute="Constant" context="#stay" String="constants"/>
+        <keyword attribute="Namespace" context="#stay" String="namespaces"/>
+
+        <!-- Type names (uppercase first letter) -->
+        <RegExpr attribute="Data Type" context="#stay" String="\b[A-Z][a-zA-Z0-9_]*\b"/>
+
+        <!-- Comments -->
+        <Detect2Chars attribute="Comment" context="LineComment" char="/" char1="/"/>
+
+        <!-- Strings -->
+        <DetectChar attribute="String" context="String" char="&quot;"/>
+        <DetectChar attribute="String" context="RawString" char="`"/>
+
+        <!-- Numbers -->
+        <RegExpr attribute="Float" context="#stay" String="\b[0-9]+\.[0-9]+\b"/>
+        <RegExpr attribute="Decimal" context="#stay" String="\b[0-9]+\b"/>
+
+        <!-- Operators -->
+        <StringDetect attribute="Operator" context="#stay" String="-&gt;"/>
+        <StringDetect attribute="Operator" context="#stay" String="??"/>
+        <StringDetect attribute="Operator" context="#stay" String="++="/>
+        <StringDetect attribute="Operator" context="#stay" String="++"/>
+        <StringDetect attribute="Operator" context="#stay" String="=&gt;"/>
+        <StringDetect attribute="Operator" context="#stay" String="&amp;&amp;"/>
+        <StringDetect attribute="Operator" context="#stay" String="||"/>
+        <StringDetect attribute="Operator" context="#stay" String="=="/>
+        <StringDetect attribute="Operator" context="#stay" String="!="/>
+        <StringDetect attribute="Operator" context="#stay" String="&gt;="/>
+        <StringDetect attribute="Operator" context="#stay" String="&lt;="/>
+
+        <!-- Array type suffix -->
+        <StringDetect attribute="Data Type" context="#stay" String="[]"/>
+      </context>
+
+      <context name="LineComment" attribute="Comment" lineEndContext="#pop">
+        <DetectSpaces/>
+        <IncludeRules context="##Comments"/>
+      </context>
+
+      <context name="String" attribute="String" lineEndContext="#stay">
+        <DetectChar attribute="String" context="#pop" char="&quot;"/>
+        <RegExpr attribute="Special Character" context="#stay" String="\\[&quot;\\nrt\{\}0]"/>
+        <DetectChar attribute="Interpolation" context="Interpolation" char="{"/>
+      </context>
+
+      <context name="Interpolation" attribute="Interpolation" lineEndContext="#stay">
+        <DetectChar attribute="Interpolation" context="#pop" char="}"/>
+      </context>
+
+      <context name="RawString" attribute="String" lineEndContext="#stay">
+        <DetectChar attribute="String" context="#pop" char="`"/>
+      </context>
+    </contexts>
+
+    <itemDatas>
+      <itemData name="Normal Text" defStyleNum="dsNormal"/>
+      <itemData name="Keyword" defStyleNum="dsKeyword"/>
+      <itemData name="Control Flow" defStyleNum="dsControlFlow"/>
+      <itemData name="Error Handling" defStyleNum="dsControlFlow" italic="true"/>
+      <itemData name="Function" defStyleNum="dsFunction"/>
+      <itemData name="Data Type" defStyleNum="dsDataType"/>
+      <itemData name="Namespace" defStyleNum="dsBuiltIn"/>
+      <itemData name="Constant" defStyleNum="dsConstant"/>
+      <itemData name="Comment" defStyleNum="dsComment"/>
+      <itemData name="String" defStyleNum="dsString"/>
+      <itemData name="Special Character" defStyleNum="dsSpecialChar"/>
+      <itemData name="Interpolation" defStyleNum="dsSpecialString"/>
+      <itemData name="Operator" defStyleNum="dsOperator"/>
+      <itemData name="Decimal" defStyleNum="dsDecVal"/>
+      <itemData name="Float" defStyleNum="dsFloat"/>
+    </itemDatas>
+  </highlighting>
+
+  <general>
+    <comments>
+      <comment name="singleLine" start="//"/>
+    </comments>
+    <keywords casesensitive="1"/>
+  </general>
+</language>

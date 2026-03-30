@@ -1,0 +1,7 @@
+{
+  "complexity": "medium",
+  "files": [
+    "src/nlp.rs",
+    "src/lib.rs"
+  ]
+}

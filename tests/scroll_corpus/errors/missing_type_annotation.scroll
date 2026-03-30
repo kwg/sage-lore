@@ -1,0 +1,7 @@
+// Set without type annotation (D13r: explicit types required)
+scroll "bad" {
+    description: "Should fail";
+    require x: int;
+    provide y: int;
+    set count = 5;
+}

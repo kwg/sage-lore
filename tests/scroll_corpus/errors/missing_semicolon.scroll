@@ -1,0 +1,7 @@
+// Missing semicolon after set declaration
+scroll "bad" {
+    description: "Should fail";
+    require x: int;
+    provide y: int;
+    set y: int = x + 1
+}

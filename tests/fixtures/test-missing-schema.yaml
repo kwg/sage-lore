@@ -1,0 +1,7 @@
+# Test fixture: Missing required schema fields
+# Expected: exit code 1 (missing 'scroll' and 'steps')
+
+description: "This scroll is missing required fields"
+
+items:
+  - something: wrong

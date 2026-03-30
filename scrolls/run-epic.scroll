@@ -1,0 +1,29 @@
+// Execute an epic: fetch and run stories one at a time
+
+scroll "run-epic" {
+    description: "Execute an epic: fetch and run stories one at a time";
+
+    require epic: map;
+    require project_root: str = ".";
+    provide epic_result: map;
+
+    // Process each story ONE AT A TIME:
+    // fetch story -> run its chunks -> next story
+    set story_results: map[] = for story_info in epic.stories {
+        // 1. Fetch story metadata + chunk references from Forgejo
+        run(scroll_path: "adapters/story-from-forgejo.scroll", args: {
+            story_number: story_info.issue_number,
+            epic_title: epic.title,
+        }) -> story_adapter_result: map;
+
+        // 2. Execute the story (fetches + implements chunks one at a time)
+        run(scroll_path: "run-story.scroll", args: {
+            project_root: project_root,
+        }) -> story_result: map;
+
+        story_result
+    };
+
+    // Aggregate results
+    aggregate(results: [epic, story_results], strategy: merge) -> epic_result: map;
+}

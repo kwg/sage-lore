@@ -1,0 +1,50 @@
+// Development wrapper for run-story with project context and TDD workflow
+
+scroll "dev-story" {
+    description: "Development wrapper for run-story with project context and TDD workflow";
+
+    require story: map;
+    require project_root: str = ".";
+    provide dev_result: map;
+
+    // Load project context for development
+    fs.read(path: "{project_root}/.sage-project/project-context.yaml") -> project_context: str;
+
+    // Load coding standards if available
+    fs.exists(path: "{project_root}/.sage-project/coding-standards.yaml") -> has_standards: bool;
+
+    set coding_standards: str = "";
+    if has_standards {
+        fs.read(path: "{project_root}/.sage-project/coding-standards.yaml") -> coding_standards: str;
+    };
+
+    // Elaborate story with development context
+    elaborate(input: story.body, depth: thorough) {
+        context: {
+            project: project_context,
+            standards: coding_standards,
+            epic: story.epic_title,
+        },
+    } -> contextualized_story: str;
+
+    // Merge context into story object
+    aggregate(results: [story, contextualized_story, project_context], strategy: merge) -> enhanced_story: map;
+
+    // Delegate to run-story.scroll for execution
+    run(scroll_path: "run-story.scroll", args: {
+        story: enhanced_story,
+        project_root: project_root,
+    }) -> story_result: map;
+
+    // Run test suite after story completion
+    test.run() -> test_results: map;
+
+    // Validate tests pass
+    validate(input: test_results) {
+        criteria: ["All tests pass", "No regressions introduced"],
+        mode: strict,
+    } -> test_validation: map;
+
+    // Convert to final development result
+    aggregate(results: [story_result, test_results, test_validation], strategy: merge) -> dev_result: map;
+}

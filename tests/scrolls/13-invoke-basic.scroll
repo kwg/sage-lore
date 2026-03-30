@@ -1,0 +1,14 @@
+scroll: invoke-basic-test
+description: "Minimal test for invoke primitive - call an agent"
+
+requires:
+  question:
+    type: string
+    description: "Question to ask agent"
+    default: "List three key considerations for API design"
+
+steps:
+  - invoke:
+      agent: analyst
+      instructions: "${question}"
+    output: agent_response

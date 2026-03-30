@@ -1,0 +1,53 @@
+// Adapter: Fetch Forgejo epic issue and return epic metadata + story references
+
+type StoryExtraction {
+    story_numbers: int[],
+}
+
+scroll "epic-from-forgejo" {
+    description: "Adapter: Fetch Forgejo epic issue and return epic metadata + story references";
+
+    require epic_number: int;
+    require milestone_name: str;
+    provide epic: map;
+
+    // Fetch epic issue from Forgejo
+    platform.get_issue(number: epic_number) -> raw_issue: map;
+
+    // Phase 1: LLM reads the epic body and extracts story numbers in execution order.
+    // The epic body contains dependency graphs, execution order sections, and story references.
+    // The LLM must determine the correct execution sequence — this is a fuzzy extraction.
+    invoke(agent: "platform-interpreter", instructions: "Extract story issue numbers in execution order from this epic") {
+        context: [raw_issue.body],
+        schema: StoryExtraction,
+        timeout: 300,
+    } -> llm_fields: StoryExtraction;
+
+    // Phase 1b: Consensus verification — 3 agents independently verify extraction
+    // Catches wrong execution order (e.g., backwards story sequence from earlier e2e runs)
+    consensus(mechanism: "vote", threshold: majority) {
+        agents: ["extraction-verifier-1", "extraction-verifier-2", "extraction-verifier-3"],
+        proposal: "An LLM extracted story execution order from this epic issue body.\n\nEPIC BODY:\n{raw_issue.body}\n\nEXTRACTED RESULT:\n{llm_fields}\n\nDoes the extracted story_numbers list contain the correct issue numbers in the correct execution order?\n\nCheck:\n- Dependency graphs and declarations (DEPENDS, PARALLEL, EXTENDS)\n- Stage numbering (Stage 1 before Stage 2, etc.)\n- Explicit Execution Order sections\n- That no issue numbers were invented or omitted\n\nVote \"approve\" if the extraction is correct.\nVote \"reject\" if the numbers or order are wrong.",
+        options: ["approve", "reject"],
+    } -> extraction_consensus: map;
+
+    // Phase 2: Engine constructs known fields (no LLM)
+    set known_fields: map = {
+        number: raw_issue.number,
+        title: raw_issue.title,
+        milestone_name: milestone_name,
+    };
+
+    // Phase 3: Merge LLM-extracted + engine-known fields
+    aggregate(results: [llm_fields, known_fields], strategy: merge) -> epic: map;
+
+    validate(input: epic) {
+        criteria: [
+            "Has number field (number)",
+            "Has title field (string)",
+            "Has milestone field (string)",
+            "Has story_numbers field (sequence of numbers)",
+        ],
+        mode: strict,
+    } -> contract_validation: map | continue;
+}

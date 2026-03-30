@@ -1,0 +1,26 @@
+// Adapter: Load epic from fixture files (no Forgejo needed)
+// Drop-in replacement for epic-from-forgejo.scroll
+
+scroll "epic-from-fixtures" {
+    description: "Adapter: Load epic metadata from fixture files";
+
+    require epic_number: int;
+    require milestone_name: str;
+    provide epic: map;
+
+    // Read issue fixture
+    fs.read(path: "fixtures/issue-{epic_number}.json") -> raw_json: str;
+    convert(input: raw_json, to: "json") -> raw_issue: map;
+
+    // Read pre-extracted metadata (story_numbers already extracted, no LLM needed)
+    fs.read(path: "fixtures/epic-{epic_number}-meta.json") -> meta_json: str;
+    convert(input: meta_json, to: "json") -> meta: map;
+
+    // Build epic from fixture data + metadata
+    set epic: map = {
+        number: raw_issue.number,
+        title: raw_issue.title,
+        milestone_name: milestone_name,
+        story_numbers: meta.story_numbers,
+    };
+}

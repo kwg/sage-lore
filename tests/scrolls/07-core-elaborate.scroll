@@ -1,0 +1,17 @@
+scroll: core-elaborate-test
+description: "Test for elaborate primitive - expand content with depth control"
+
+requires:
+  input_text:
+    type: string
+    description: "Text to elaborate"
+    default: "User login feature"
+
+steps:
+  - elaborate:
+      input: ${input_text}
+      depth: thorough
+      output_contract:
+        length: paragraph
+        format: prose
+    output: elaborated_result

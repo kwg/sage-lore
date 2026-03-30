@@ -1,0 +1,8 @@
+// Type definition without braces
+type Foo
+scroll "bad" {
+    description: "Should fail";
+    require x: int;
+    provide y: int;
+    set y: int = 0;
+}

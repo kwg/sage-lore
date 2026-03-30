@@ -1,0 +1,51 @@
+// Adapter: Fetch Forgejo issue and convert to ChunkInput contract
+
+type ChunkFields {
+    complexity: str,
+    files: str[],
+}
+
+scroll "chunk-from-forgejo" {
+    description: "Adapter: Fetch Forgejo issue and convert to ChunkInput contract";
+
+    require chunk_number: int;
+    require parent_story: str;
+    provide chunk: map;
+
+    // Fetch chunk issue from Forgejo
+    platform.get_issue(number: chunk_number) -> raw_issue: map;
+
+    // Phase 1: LLM extracts ONLY fields that need fuzzy parsing.
+    // complexity and files require reading the issue body structure.
+    // spec is just the full body — available as raw_issue.body, no LLM needed.
+    invoke(agent: "platform-interpreter", instructions: "Extract complexity and file paths from this chunk issue") {
+        context: [raw_issue.body],
+        schema: ChunkFields,
+        timeout: 300,
+    } -> llm_fields: ChunkFields;
+
+    // Phase 2: Engine constructs known fields (no LLM needed)
+    // spec is the full issue body — no reason for the LLM to echo it
+    set known_fields: map = {
+        title: raw_issue.title,
+        number: raw_issue.number,
+        parent_story: parent_story,
+        spec: raw_issue.body,
+    };
+
+    // Phase 3: Merge LLM-extracted + engine-known fields
+    aggregate(results: [llm_fields, known_fields], strategy: merge) -> chunk: map;
+
+    // Validate chunk matches ChunkInput contract
+    validate(input: chunk) {
+        criteria: [
+            "Has title field (string)",
+            "Has number field (number)",
+            "Has complexity field (string)",
+            "Has files field (sequence)",
+            "Has spec field (string)",
+            "Has parent_story field (string)",
+        ],
+        mode: strict,
+    } -> contract_validation: map | continue;
+}

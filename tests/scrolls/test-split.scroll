@@ -1,0 +1,26 @@
+scroll: test-split-production
+description: Test split primitive with production backend
+
+requires:
+  input_text:
+    type: string
+    default: |
+      # Introduction
+      This document covers three main topics.
+
+      # Topic One
+      The first topic discusses foundational concepts.
+
+      # Topic Two
+      The second topic builds on the first.
+
+      # Topic Three
+      The final topic provides practical applications.
+
+steps:
+  - split:
+      input: ${input_text}
+      by: structure
+      granularity: coarse
+      markers: headers
+    output: result

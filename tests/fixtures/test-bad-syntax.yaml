@@ -1,0 +1,9 @@
+# Test fixture: Invalid YAML syntax
+# Expected: exit code 1 (syntax error)
+
+scroll: test-bad-syntax
+description: "Test scroll with invalid YAML
+
+steps:
+  - this line is missing closing quote
+  - transform: { input: unclosed

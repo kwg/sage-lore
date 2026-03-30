@@ -1,0 +1,71 @@
+// Comprehensive test scroll for all system primitives (fs, vcs, test, platform, run)
+// This scroll demonstrates all system primitive types to verify parser + dispatch
+
+scroll "test-system-primitives" {
+    description: "Comprehensive test scroll for all system primitives (fs, vcs, test, platform, run)";
+
+    // ========================================================================
+    // FS (Filesystem) Operations
+    // ========================================================================
+
+    fs.read(path: "/tmp/test-input.txt") -> file_content: str | continue;
+
+    fs.write(path: "/tmp/test-output.txt", content: "Test output data");
+
+    fs.list(path: "/tmp") -> tmp_files: str[];
+
+    fs.exists(path: "/tmp/test-output.txt") -> file_exists: bool;
+
+    // ========================================================================
+    // VCS (Version Control) Operations
+    // ========================================================================
+
+    vcs.status() -> git_status: map;
+
+    vcs.diff() -> git_diff: str;
+
+    vcs.add(files: ["src/main.rs", "README.md"]) -> staged_files: map | continue;
+
+    vcs.commit(message: "Test commit message", files: ["src/main.rs"]) -> commit_hash: map | continue;
+
+    // ========================================================================
+    // TEST Operations
+    // ========================================================================
+
+    test.run(pattern: "**/*.test.rs") -> test_results: map | retry(2);
+
+    test.coverage(threshold: 80, report_format: "html") -> coverage_report: map | continue;
+
+    // ========================================================================
+    // PLATFORM Operations
+    // ========================================================================
+
+    platform.env() -> environment_vars: map;
+
+    platform.info() -> platform_info: map;
+
+    platform.check() -> platform_check: map;
+
+    // ========================================================================
+    // RUN (Sub-scroll) Operation
+    // ========================================================================
+
+    run(scroll_path: "./good-scroll-variable-refs.scroll", args: {
+        input_data: "test",
+        debug_mode: true,
+    }) -> subscroll_result: map | continue;
+
+    // ========================================================================
+    // Mixed operations with flow control
+    // ========================================================================
+
+    if file_exists {
+        fs.delete(path: "/tmp/test-output.txt") -> delete_result: map;
+    } else {
+        fs.write(path: "/tmp/test-output.txt", content: "Created by fallback");
+    };
+
+    for file_path in tmp_files {
+        fs.exists(path: file_path) -> exists_check: bool;
+    };
+}

@@ -1,0 +1,9 @@
+scroll: test-runner-test
+description: "Minimal test for test primitive - run project tests"
+
+steps:
+  # Run the project's tests
+  - test:
+      operation: run
+    output: test_results
+    on_fail: continue

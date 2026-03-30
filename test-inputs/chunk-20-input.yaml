@@ -1,0 +1,5 @@
+# Test input for chunk-from-forgejo.scroll
+# Testing against kai/sage-dice#20
+
+chunk_number: 20
+parent_story: "4"

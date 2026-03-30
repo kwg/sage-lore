@@ -1,0 +1,16 @@
+scroll: consensus-validation-test
+description: Tests consensus validation on expand primitive
+
+requires:
+  input_text:
+    type: string
+    default: "Microservices architecture"
+
+steps:
+  - expand:
+      input: ${input_text}
+      target: "detailed technical explanation with examples"
+      validate_with_consensus:
+        - "The output contains more words than the input"
+    output: expanded_result
+    on_fail: halt

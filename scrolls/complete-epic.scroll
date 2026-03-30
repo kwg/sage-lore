@@ -1,0 +1,40 @@
+// Finalize epic: merge stories, create PR, update platform
+
+scroll "complete-epic" {
+    description: "Finalize epic: merge stories, create PR, update platform";
+
+    require epic: map;
+    require project_root: str = ".";
+    require target_branch: str = "main";
+    require epic_branch: str;
+    provide completion_result: map;
+
+    // Verify all tests pass on epic branch
+    test.run() -> test_results: map;
+
+    validate(input: test_results) {
+        criteria: ["All tests pass", "No regressions from target branch"],
+        mode: strict,
+    } -> test_validation: map;
+
+    // Get diff stats (not full diff — avoids overloading LLM with 100s KB of code)
+    vcs.diff(scope: "stat") -> epic_diff_stat: str;
+
+    // Generate PR description from summary data, not raw diff (#130)
+    elaborate(input: "Epic: {epic.title}\nMilestone: {epic.milestone}\nStories completed: {epic.stories}\nFiles changed:\n{epic_diff_stat}", depth: thorough) -> pr_description: str;
+
+    // Create pull request
+    platform.create_pr(title: "Epic {epic.number}: {epic.title}", body: pr_description, base: target_branch, head: epic_branch) -> pr_result: map;
+
+    // Add completion comment to epic issue
+    platform.create_comment(number: epic.number, body: "Epic completed. Pull request created: {pr_result.url}\n\nAll stories have been implemented and tested.\nReady for review and merge.") -> comment_result: map;
+
+    // Close epic issue
+    platform.close_issue(number: epic.number) -> close_result: map;
+
+    // Distill completion summary
+    distill(input: "Epic: {epic.title}\nPR: {pr_result.url}\nStories: {epic.stories}\nStatus: completed", intensity: minimal) -> summary: str;
+
+    // Build final completion result
+    aggregate(results: [epic, pr_result, summary], strategy: merge) -> completion_result: map;
+}

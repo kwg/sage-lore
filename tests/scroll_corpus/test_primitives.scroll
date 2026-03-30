@@ -1,0 +1,68 @@
+// All primitive namespaces: platform, fs, vcs, test, invoke, parallel, consensus
+type Review {
+    approved: bool,
+    notes: str,
+}
+
+type Vote {
+    decision: str,
+}
+
+scroll "primitives-test" {
+    description: "Tests all primitive call syntax";
+
+    require project_root: str;
+    require issue_number: int;
+    provide status: str;
+
+    // Platform primitives
+    platform.get_issue(number: issue_number) -> raw_issue: map;
+    platform.create_issue(title: "Test", body: "Body", labels: ["type:chunk"]) -> new_issue: map;
+    platform.list_issues(state: "open", labels: ["type:story"]) -> stories: map[];
+    platform.close_issue(number: issue_number);
+
+    // Filesystem primitives
+    fs.read(path: "{project_root}/src/main.rs") -> content: str;
+    fs.write(path: "{project_root}/output.txt", content: "test");
+    fs.exists(path: "{project_root}/Cargo.toml") -> has_cargo: bool;
+    fs.list(path: "{project_root}/src") -> entries: str[];
+    fs.mkdir(path: "{project_root}/src/new_module");
+
+    // VCS primitives
+    vcs.status() -> vcs_status: map;
+    vcs.commit(message: "feat: test commit");
+    vcs.branch(name: "test-branch");
+    vcs.diff(scope: "staged") -> changes: str;
+
+    // Test primitives
+    test.run() -> test_results: map;
+    test.run(filter: "test_parser") -> filtered_results: map;
+
+    // Invoke (agent call)
+    invoke(agent: "dev", instructions: "Implement this") {
+        context: [raw_issue],
+        schema: Review,
+        tier: premium,
+        timeout: 600,
+    } -> impl_review: Review;
+
+    // Parallel (same prompt, multiple agents)
+    parallel(agents: ["arch", "security", "perf"], instructions: "Review design") {
+        schema: Review,
+        require: quorum(3),
+    } -> reviews: Review[];
+
+    // Consensus (voting)
+    consensus(mechanism: "vote", threshold: majority) {
+        agents: ["v1", "v2", "v3"],
+        proposal: "Is this correct?",
+        options: ["approve", "reject"],
+    } -> vote: Vote;
+
+    // Cognitive primitives
+    elaborate(input: "draft text", depth: thorough) -> enriched: str;
+    distill(input: "verbose text", intensity: aggressive) -> summary: str;
+    convert(input: "raw json", to: "json") -> parsed: map;
+
+    set status: str = "complete";
+}

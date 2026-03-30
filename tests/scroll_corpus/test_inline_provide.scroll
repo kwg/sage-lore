@@ -1,0 +1,24 @@
+// Inline struct definitions on require/provide
+scroll "inline-provide-test" {
+    description: "Tests inline struct definitions";
+
+    require chunk: Chunk {
+        number: int,
+        title: str,
+        body: str,
+        files: str[],
+    };
+
+    provide implementation: Implementation {
+        files: str[],
+        summary: str,
+        tests_added: str[],
+    };
+
+    invoke(agent: "dev", instructions: "Implement chunk") {
+        context: [chunk],
+        schema: Implementation,
+    } -> result: Implementation;
+
+    implementation = result;
+}

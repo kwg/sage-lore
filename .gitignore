@@ -1,0 +1,34 @@
+# Rust
+/target/
+**/*.rs.bk
+# Cargo.lock committed for binary crate (Nix build requires it)
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# SAGE runtime state (gitignored by default, can be tracked per-project)
+.sage-project/
+
+# Recovery artifacts (temporary, clean before shipping)
+.recovery/
+
+# MCP server config (contains API tokens)
+.mcp.json
+
+# Secrets (never commit)
+secrets.yaml
+*.pem
+*.key
+.sage-lore/failures/

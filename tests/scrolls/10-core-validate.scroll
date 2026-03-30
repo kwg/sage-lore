@@ -1,0 +1,20 @@
+scroll: core-validate-test
+description: "Test for validate primitive - check against criteria with mode"
+
+requires:
+  code_to_validate:
+    type: string
+    description: "Code to validate"
+    default: |
+      fn add(a: i32, b: i32) -> i32 {
+          a + b
+      }
+
+steps:
+  - validate:
+      input: ${code_to_validate}
+      criteria:
+        - "Function has a return type"
+        - "Function takes two parameters"
+      mode: strict
+    output: validation_result

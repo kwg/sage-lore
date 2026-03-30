@@ -1,0 +1,8 @@
+scroll: run-subscroll-test
+description: "Minimal test for run primitive - execute another scroll"
+
+steps:
+  # Run the vcs-readonly scroll as a subscroll
+  - run:
+      scroll_path: tests/scrolls/02-vcs-readonly.scroll
+    output: subscroll_result

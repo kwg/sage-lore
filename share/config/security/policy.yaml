@@ -1,0 +1,21 @@
+# sage-lore default security policy
+# Engine requires this file to run (D10).
+# Override in ~/.config/sage-lore/security/policy.yaml or .sage-lore/security/policy.yaml.
+
+security_level: standard
+required_tools: []
+fallback_policy: warn
+
+secret_detection:
+  on_finding: abort_and_reset
+  on_existing: block
+
+dependency_scan:
+  enabled: true
+  severity_threshold: LOW
+  on_finding: abort_and_reset
+
+static_analysis:
+  enabled: false
+  ruleset: "p/security-audit"
+  on_finding: warn

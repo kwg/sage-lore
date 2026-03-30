@@ -1,0 +1,162 @@
+[
+  {
+    "number": 1,
+    "title": "sage-dice NLP Dice Roller Epic",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:high",
+      "type:epic"
+    ]
+  },
+  {
+    "number": 2,
+    "title": "Story 1: Dice Engine Core",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:high",
+      "type:story"
+    ]
+  },
+  {
+    "number": 3,
+    "title": "Story 2: Game System Modifiers",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:story"
+    ]
+  },
+  {
+    "number": 4,
+    "title": "Story 3: NLP Parser + CLI Polish",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:story"
+    ]
+  },
+  {
+    "number": 14,
+    "title": "types-parser-foundation",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:high",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 15,
+    "title": "engine-rng-rolling",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:high",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 16,
+    "title": "output-main-integration",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 17,
+    "title": "parser-extensions-exploding-fate",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 18,
+    "title": "systems-module-foundation",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 19,
+    "title": "engine-output-game-systems",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 20,
+    "title": "cli-foundation-clap-parser",
+    "state": "open",
+    "labels": [
+      "area:cli",
+      "phase:ready",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 21,
+    "title": "nlp-module-ollama-integration",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 22,
+    "title": "json-output-module",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 23,
+    "title": "cli-tests-ci-runnable",
+    "state": "open",
+    "labels": [
+      "area:cli",
+      "phase:ready",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 24,
+    "title": "nlp-tests-mixed-ci-integration",
+    "state": "open",
+    "labels": [
+      "phase:ready",
+      "priority:medium",
+      "type:chunk"
+    ]
+  },
+  {
+    "number": 25,
+    "title": "main-cli-nlp-wiring",
+    "state": "open",
+    "labels": [
+      "area:cli",
+      "phase:ready",
+      "type:chunk"
+    ]
+  }
+]

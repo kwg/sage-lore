@@ -1,0 +1,29 @@
+# Test fixture: Primitives with missing required parameters
+# Expected: exit code 1 (primitive parameter errors)
+
+scroll: test-bad-primitives
+description: "Test scroll with invalid primitive parameters"
+
+steps:
+  # invoke without agent or interface
+  - invoke:
+      context: [task]
+      output: result
+
+  # loop without items
+  - loop:
+      operation:
+        - transform: { input: x, schema: y }
+
+  # validate without criteria
+  - validate:
+      input: result
+
+  # branch without condition
+  - branch:
+      if_true:
+        - transform: { input: x, schema: y }
+
+  # concurrent without operations
+  - concurrent:
+      output: results

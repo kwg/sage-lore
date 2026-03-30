@@ -1,0 +1,24 @@
+scroll: flow-branch-test
+description: "Minimal test for branch primitive - conditional execution"
+
+steps:
+  # 1. Create a condition
+  - fs:
+      operation: exists
+      path: Cargo.toml
+    output: has_cargo
+
+  # 2. Branch on the condition
+  - branch:
+      condition: "${has_cargo}"
+      if_true:
+        - fs:
+            operation: read
+            path: Cargo.toml
+          output: cargo_contents
+      if_false:
+        - fs:
+            operation: write
+            path: .test-output/no-cargo.txt
+            content: "No Cargo.toml found"
+    output: branch_result

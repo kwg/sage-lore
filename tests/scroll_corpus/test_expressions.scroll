@@ -1,0 +1,55 @@
+// Blocks as expressions: if-expr, match-expr, for-expr
+type Complexity { low, medium, high }
+
+type Impl {
+    code: str,
+}
+
+scroll "expression-test" {
+    description: "Tests blocks as expressions";
+
+    require chunks: int[];
+    require complexity: Complexity;
+    provide results: Impl[];
+
+    // If as expression
+    set count: int = 5;
+    set label: str = if count > 0 { "active" } else { "empty" };
+
+    // Match as expression
+    set timeout: int = match complexity {
+        Complexity.low => 120,
+        Complexity.medium => 300,
+        Complexity.high => 600,
+    };
+
+    // For as expression — returns array
+    set results: Impl[] = for chunk_num in chunks {
+        invoke(agent: "dev", instructions: "Implement chunk") {
+            context: [chunk_num],
+            schema: Impl,
+        } -> impl_result: Impl;
+        impl_result
+    };
+
+    // For with null coalescing on return
+    set safe_results: Impl[] = for chunk_num in chunks {
+        invoke(agent: "reviewer", instructions: "Review") {
+            schema: Impl,
+        } -> reviewed: Impl | continue;
+        invoke(agent: "dev", instructions: "Default") {
+            schema: Impl,
+        } -> fallback_impl: Impl;
+        reviewed ?? fallback_impl
+    };
+
+    // Ternary expression
+    set tier: str = if timeout > 300 { "premium" } else { "cheap" };
+
+    // Nested if expression
+    set priority: str = if count > 10 {
+        if timeout > 300 { "critical" } else { "high" }
+    } else {
+        "normal"
+    };
+}

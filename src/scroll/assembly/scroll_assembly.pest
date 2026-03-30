@@ -1,0 +1,267 @@
+// ============================================================
+// Scroll Assembly Language Grammar
+// SAGE Method — sage-lore
+// PEG grammar for pest parser generator
+// ============================================================
+
+// --- Whitespace & Comments (implicit between ~ sequences) ---
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* }
+
+// ============================================================
+// Top-Level
+// ============================================================
+
+scroll_file = { SOI ~ type_def* ~ scroll_block ~ EOI }
+
+// ============================================================
+// Type Definitions
+// ============================================================
+
+type_def      = { "type" ~ type_name ~ "{" ~ type_body ~ "}" }
+type_body     = { struct_fields | enum_variants }
+
+struct_fields  = { struct_field ~ ("," ~ struct_field)* ~ ","? }
+struct_field   = { ident ~ ":" ~ type_ref }
+
+enum_variants  = { ident ~ ("," ~ ident)* ~ ","? }
+
+// ============================================================
+// Type References
+// ============================================================
+
+type_ref        = { type_base ~ array_suffix? ~ nullable_suffix? }
+type_base       = _{ prim_type | type_name }
+prim_type       = { "str" | "int" | "float" | "bool" | "map" }
+array_suffix    = { "[" ~ "]" }
+nullable_suffix = { "?" }
+
+// ============================================================
+// Identifiers & Keywords
+// ============================================================
+
+// Raw identifier — no keyword check. Used for field names, arg names.
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Keyword-checked identifier — used for variable names.
+identifier = @{
+    !( keyword_word ~ !(ASCII_ALPHANUMERIC | "_") )
+    ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")*
+}
+
+// Type name — uppercase first letter.
+type_name = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Reserved keywords
+// Keywords ordered longest-first within prefix groups to avoid PEG
+// ordered-choice conflicts (e.g. "int" before "in", "map" before "match"
+// is not needed since "map" != prefix of "match", but we order by length
+// within each starting letter for safety).
+keyword_word = _{
+    "description" | "concurrent" | "continue" | "fallback" | "provide"
+  | "require" | "scroll" | "while" | "break" | "match" | "false"
+  | "float" | "else" | "bool" | "null" | "type" | "set" | "for"
+  | "int" | "str" | "map" | "in" | "if" | "true" | "retry"
+}
+
+// ============================================================
+// Scroll Block
+// ============================================================
+
+scroll_block = { "scroll" ~ string_lit ~ "{" ~ scroll_header* ~ block_body ~ "}" }
+
+scroll_header = _{ description_decl | require_decl | provide_decl }
+
+description_decl = { "description" ~ ":" ~ string_lit ~ ";" }
+
+require_decl = { "require" ~ identifier ~ ":" ~ provide_type ~ ("=" ~ expression)? ~ ";" }
+
+provide_decl = { "provide" ~ identifier ~ ":" ~ provide_type ~ ";" }
+
+// Type with optional inline struct definition.
+// PEG ordered choice: tries type_name + inline_struct first. If no inline
+// struct follows (just "Story"), backtracks and matches as plain type_ref.
+provide_type = { type_name ~ inline_struct_def | type_ref }
+inline_struct_def = { "{" ~ struct_fields ~ "}" }
+
+// ============================================================
+// Block Body
+// ============================================================
+
+// A block body is: zero or more semicolon-terminated items, plus an optional
+// trailing expression (the return value, no semicolon).
+block_body = { terminated* ~ expression? }
+
+terminated = _{
+    set_decl ~ ";"
+  | binding_stmt ~ ";"
+  | assignment ~ ";"
+  | break_stmt ~ ";"
+  | block_expr ~ ";"
+  | expression ~ ";"
+}
+
+// ============================================================
+// Statements
+// ============================================================
+
+set_decl = { "set" ~ identifier ~ ":" ~ type_ref ~ "=" ~ expression }
+
+binding_stmt = { expression ~ "->" ~ identifier ~ ":" ~ type_ref ~ error_chain? }
+
+assignment = { identifier ~ assign_op ~ expression }
+assign_op  = @{ "++=" | "+=" | "-=" | "=" ~ !("=" | ">") }
+
+break_stmt = { "break" }
+
+// ============================================================
+// Error Handling Chain
+// ============================================================
+
+error_chain      = { error_handler+ }
+error_handler    = { "|" ~ !("|") ~ handler_kind }
+handler_kind     = _{ continue_handler | retry_handler | fallback_handler }
+continue_handler = { "continue" }
+retry_handler    = { "retry" ~ "(" ~ integer_lit ~ ")" }
+fallback_handler = { "fallback" ~ "{" ~ block_body ~ "}" }
+
+// ============================================================
+// Block Expressions (no semicolon needed when used as statements)
+// ============================================================
+
+block_expr = {
+    if_expr
+  | match_expr
+  | for_expr
+  | while_expr
+  | concurrent_block
+  | concurrent_for
+}
+
+if_expr      = { "if" ~ expression ~ "{" ~ block_body ~ "}" ~ else_clause? }
+else_clause  = { "else" ~ (if_expr | "{" ~ block_body ~ "}") }
+
+match_expr   = { "match" ~ expression ~ "{" ~ match_arm+ ~ "}" }
+match_arm    = { expression ~ "=>" ~ arm_body ~ ","? }
+arm_body     = { arm_block | expression }
+arm_block    = { "{" ~ block_body ~ "}" }
+
+for_expr     = { "for" ~ identifier ~ "in" ~ expression ~ "{" ~ block_body ~ "}" }
+
+while_expr   = { "while" ~ expression ~ "{" ~ block_body ~ "}" }
+
+concurrent_block = { "concurrent" ~ !("for") ~ "{" ~ block_body ~ "}" }
+concurrent_for   = { "concurrent" ~ "for" ~ identifier ~ "in" ~ expression ~ "{" ~ block_body ~ "}" }
+
+// ============================================================
+// Expressions (precedence climbing, lowest to highest)
+// ============================================================
+
+expression = { ternary }
+
+// Ternary: cond ? true_val : false_val
+ternary = { null_coalesce ~ ("?" ~ !(":") ~ expression ~ ":" ~ null_coalesce)? }
+
+// Null coalescing: a ?? b
+null_coalesce = { logical_or ~ (null_coalesce_op ~ logical_or)* }
+null_coalesce_op = @{ "??" }
+
+// Logical OR: a || b
+logical_or = { logical_and ~ (or_op ~ logical_and)* }
+or_op = @{ "||" }
+
+// Logical AND: a && b
+logical_and = { equality ~ (and_op ~ equality)* }
+and_op = @{ "&&" }
+
+// Equality: a == b, a != b
+equality = { comparison ~ (eq_op ~ comparison)* }
+eq_op    = @{ "==" | "!=" }
+
+// Comparison: a > b, a < b, a >= b, a <= b
+comparison = { addition ~ (cmp_op ~ addition)* }
+cmp_op     = @{ ">=" | "<=" | ">" ~ !("=") | "<" ~ !("=") }
+
+// Addition/subtraction, map merge: a + b, a - b
+addition = { concatenation ~ (add_op ~ concatenation)* }
+add_op   = @{ "+" ~ !("+" | "=") | "-" ~ !("=" | ">") }
+
+// Array concatenation: a ++ b
+concatenation = { unary ~ (concat_op ~ unary)* }
+concat_op  = @{ "++" ~ !("+" | "=") }
+
+// Unary: !a
+unary = { "!" ~ unary | postfix }
+
+// Postfix: field access and calls
+postfix    = { primary ~ postfix_op* }
+postfix_op = _{ call_expr | field_access }
+
+call_expr    = { "(" ~ call_args? ~ ")" ~ config_block? }
+call_args    = { call_arg ~ ("," ~ call_arg)* }
+call_arg     = { named_arg | expression }
+named_arg    = { ident ~ ":" ~ expression }
+
+config_block  = { "{" ~ config_fields? ~ "}" }
+config_fields = { config_field ~ ("," ~ config_field)* ~ ","? }
+config_field  = { ident ~ ":" ~ expression }
+
+field_access = { "." ~ ident }
+
+// ============================================================
+// Primary Expressions
+// ============================================================
+
+primary = _{
+    "(" ~ expression ~ ")"
+  | array_lit
+  | struct_lit
+  | map_lit
+  | if_expr
+  | match_expr
+  | for_expr
+  | while_expr
+  | concurrent_block
+  | concurrent_for
+  | string_lit
+  | raw_string_lit
+  | float_lit
+  | integer_lit
+  | bool_lit
+  | null_lit
+  | identifier
+}
+
+// ============================================================
+// Literals
+// ============================================================
+
+// Struct literal: TypeName { field: value, ... }
+struct_lit = { type_name ~ "{" ~ config_fields? ~ "}" }
+
+// Map literal: { key: value, ... }
+map_lit = { "{" ~ config_fields ~ "}" }
+
+// Array literal: [a, b, c]
+array_lit = { "[" ~ (expression ~ ("," ~ expression)*)? ~ ","? ~ "]" }
+
+// String with interpolation
+string_lit    = ${ "\"" ~ string_inner* ~ "\"" }
+string_inner  = _{ interpolation | escape_seq | string_char }
+interpolation = { "{" ~ expression ~ "}" }
+escape_seq    = @{ "\\" ~ ("\"" | "\\" | "n" | "r" | "t" | "{" | "}" | "0") }
+string_char   = @{ !("\"" | "\\" | "{") ~ ANY }
+
+// Raw string (backticks, no interpolation)
+raw_string_lit = @{ "`" ~ (!"`" ~ ANY)* ~ "`" }
+
+// Numbers
+float_lit   = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+integer_lit = @{ ASCII_DIGIT+ }
+
+// Boolean
+bool_lit = { "true" | "false" }
+
+// Null
+null_lit = { "null" }

@@ -1,0 +1,49 @@
+// Complex match expressions with blocks and expressions
+type Complexity { low, medium, high }
+
+type Result {
+    value: str,
+}
+
+scroll "match-complex-test" {
+    description: "Tests complex match patterns";
+
+    require complexity: Complexity;
+    provide result: Result;
+
+    // Match as expression with simple values
+    set timeout: int = match complexity {
+        Complexity.low => 120,
+        Complexity.medium => 300,
+        Complexity.high => 600,
+    };
+
+    // Match as expression with blocks
+    set config: map = match complexity {
+        Complexity.low => {
+            set t: int = 120;
+            { timeout: t, retries: 1 }
+        },
+        Complexity.medium => {
+            set t: int = 300;
+            { timeout: t, retries: 3 }
+        },
+        Complexity.high => {
+            set t: int = 600;
+            { timeout: t, retries: 5 }
+        },
+    };
+
+    // Match as statement (void)
+    match complexity {
+        Complexity.low => {
+            set result: Result = Result { value: "fast" };
+        },
+        Complexity.medium => {
+            set result: Result = Result { value: "normal" };
+        },
+        Complexity.high => {
+            set result: Result = Result { value: "thorough" };
+        },
+    };
+}

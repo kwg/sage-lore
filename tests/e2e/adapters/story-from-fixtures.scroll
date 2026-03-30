@@ -1,0 +1,27 @@
+// Adapter: Load story from fixture files (no Forgejo needed)
+// Drop-in replacement for story-from-forgejo.scroll
+
+scroll "story-from-fixtures" {
+    description: "Adapter: Load story metadata from fixture files";
+
+    require story_number: int;
+    require epic_title: str;
+    provide story: map;
+
+    // Read issue fixture
+    fs.read(path: "fixtures/issue-{story_number}.json") -> raw_json: str;
+    convert(input: raw_json, to: "json") -> raw_issue: map;
+
+    // Read pre-extracted metadata (chunk_numbers already extracted, no LLM needed)
+    fs.read(path: "fixtures/story-{story_number}-meta.json") -> meta_json: str;
+    convert(input: meta_json, to: "json") -> meta: map;
+
+    // Build story from fixture data + metadata
+    set story: map = {
+        number: raw_issue.number,
+        title: raw_issue.title,
+        epic_title: epic_title,
+        body: raw_issue.body,
+        chunk_numbers: meta.chunk_numbers,
+    };
+}

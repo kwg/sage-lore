@@ -1,0 +1,27 @@
+// Map merge, array concat, array append
+type Config {
+    timeout: int,
+    retries: int,
+}
+
+scroll "map-merge-test" {
+    description: "Tests map and array operations";
+
+    require base_timeout: int;
+    provide final_config: Config;
+
+    // Map merge with +
+    set defaults: Config = Config { timeout: 300, retries: 3 };
+    set overrides: map = { timeout: 600 };
+    set final_config: Config = defaults + overrides;
+
+    // Array concatenation with ++
+    set list_a: int[] = [1, 2, 3];
+    set list_b: int[] = [4, 5, 6];
+    set combined: int[] = list_a ++ list_b;
+
+    // Array append with ++=
+    set items: str[] = ["first"];
+    items ++= "second";
+    items ++= "third";
+}

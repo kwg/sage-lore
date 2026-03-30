@@ -1,0 +1,24 @@
+scroll: test-distill-production
+description: Test distill primitive with production backend
+
+requires:
+  input_text:
+    type: string
+    default: |
+      Microservices architecture is a software development approach that structures an application
+      as a collection of loosely coupled services. Each service is fine-grained and implements a
+      single business capability. Services can be developed, deployed, and scaled independently.
+      They communicate through well-defined APIs, typically REST or message queues. This approach
+      enables teams to work autonomously on different services, using different technologies if needed.
+      The main benefits include improved scalability, fault isolation, and faster deployment cycles.
+      However, microservices also introduce complexity in terms of distributed system management,
+      service discovery, and data consistency across services.
+
+steps:
+  - distill:
+      input: ${input_text}
+      intensity: balanced
+      output_contract:
+        length: sentence
+        format: prose
+    output: result

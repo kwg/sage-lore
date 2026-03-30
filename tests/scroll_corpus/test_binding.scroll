@@ -1,0 +1,38 @@
+// Variable binding: set, reassignment, compound assignment, -> binding
+type Result {
+    value: str,
+}
+
+scroll "binding-test" {
+    description: "Tests variable binding mechanisms";
+
+    require input: int;
+    provide output: str;
+
+    // Set declaration
+    set count: int = 0;
+    set name: str = "initial";
+
+    // Reassignment (bare name, no set)
+    count = count + 1;
+    name = "updated";
+
+    // Compound assignment
+    count += 5;
+    count -= 1;
+
+    // Array append
+    set items: str[] = ["first"];
+    items ++= "second";
+
+    // -> binding from primitive call
+    platform.get_issue(number: input) -> raw_issue: map;
+
+    // -> binding from invoke
+    invoke(agent: "dev", instructions: "Do something") {
+        context: [raw_issue],
+        schema: Result,
+    } -> result: Result;
+
+    set output: str = result.value;
+}

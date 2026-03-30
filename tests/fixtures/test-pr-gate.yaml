@@ -1,0 +1,17 @@
+# Test fixture: Scroll with git.pr requiring Gate 4
+# Expected: exit code 2 (Gate 4 incomplete - needs all 5 scan_types)
+
+scroll: test-pr-gate
+description: "Test scroll with PR operation missing full Gate 4"
+
+steps:
+  - transform: { input: state_file, schema: current_story, output: story }
+
+  # Only has 3 scan_types, missing allowlist and sensitive_paths
+  - secure:
+      input: all_files
+      scan_type: [dependency_cve, secret_detection, static_analysis]
+      policy: block  # Also wrong - should be severity-based for PR
+
+  - invoke: { interface: git.pr, params: { title: "Feature PR" } }
+  - checkpoint: { label: pr_created }

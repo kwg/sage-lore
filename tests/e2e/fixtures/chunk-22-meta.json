@@ -1,0 +1,6 @@
+{
+  "complexity": "low",
+  "files": [
+    "src/output.rs"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "complexity": "medium",
+  "files": [
+    "src/lib.rs",
+    "src/types.rs",
+    "src/parser.rs",
+    "tests/parser_test.rs"
+  ]
+}

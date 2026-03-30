@@ -1,0 +1,60 @@
+// Initialize epic: decompose to stories, create issues
+
+scroll "create-epic" {
+    description: "Initialize epic: decompose to stories, create issues";
+
+    require epic: map;
+    require milestone_name: str;
+    provide stories: map[];
+    provide epic_issue: map;
+
+    // Create epic issue payload using invoke
+    invoke(agent: "data-transformer", instructions: "Transform this epic into a Forgejo issue payload") {
+        context: [epic],
+    } -> epic_payload_raw: map;
+
+    convert(input: epic_payload_raw, to: "json") -> epic_payload: map;
+
+    platform.create_issue(payload: epic_payload) -> epic_issue: map;
+
+    // Decompose epic into stories using invoke (semantic split)
+    invoke(agent: "story-splitter", instructions: "Decompose this epic into story-level work items") {
+        context: [epic],
+    } -> story_drafts_raw: map;
+
+    convert(input: story_drafts_raw, to: "json") -> story_drafts: map;
+
+    // Slim epic reference for story elaboration — don't repeat the full epic
+    // in every loop iteration (#130: token budget discipline)
+    set epic_ref: map = { title: epic.title, goals: epic.goals, constraints: epic.constraints };
+
+    // Elaborate each story into full specification
+    set stories: map[] = for draft in story_drafts.items {
+        invoke(agent: "story-definer", instructions: "Expand this story draft into a full story definition") {
+            context: [draft, epic_ref],
+        } -> story_spec: map;
+
+        convert(input: story_spec, to: "json") -> story_def: map;
+        story_def
+    };
+
+    // Validate story decomposition
+    validate(input: stories) {
+        criteria: [
+            "Stories are independently implementable",
+            "Dependencies form a DAG (no cycles)",
+            "Each story fits in one session",
+        ],
+    } -> decomposition_check: map;
+
+    // Create issue for each story
+    for story_item in stories {
+        invoke(agent: "data-transformer", instructions: "Transform this story into a Forgejo issue payload") {
+            context: [story_item],
+        } -> story_payload_raw: map;
+
+        convert(input: story_payload_raw, to: "json") -> story_payload: map;
+
+        platform.create_issue(payload: story_payload) -> story_issue: map;
+    };
+}

@@ -1,0 +1,40 @@
+// Test implementing a single chunk: fetch -> implement -> write -> test -> review -> consensus
+
+scroll "test-single-chunk" {
+    description: "Test implementing a single chunk: fetch -> implement -> write -> test -> review -> consensus";
+
+    require chunk_number: int;
+    require project_root: str = ".";
+
+    // 1. Fetch chunk spec from Forgejo
+    run(scroll_path: "adapters/chunk-from-forgejo.scroll", args: {
+        chunk_number: chunk_number,
+        parent_story: "Story 2-1: Dice Types and Parser",
+    }) -> chunk_adapter_result: map;
+
+    // 2. Implement the chunk
+    run(scroll_path: "implement-chunk.scroll", args: {
+        project_root: project_root,
+    }) -> impl_result: map;
+
+    // 3. Write files to disk
+    for file in implementation.files {
+        fs.write(path: "{project_root}/{file.path}", content: file.content);
+    };
+
+    // 4. Run tests
+    test.run() -> chunk_tests: map | continue;
+
+    // 5. Code review
+    invoke(agent: "code-reviewer", instructions: "Review chunk {chunk.number}: {chunk.title}") {
+        context: [chunk.spec, chunk_tests, implementation.files],
+        timeout: 300,
+    } -> review_findings: map;
+
+    // 6. Consensus gate
+    consensus(mechanism: "vote", threshold: majority) {
+        agents: ["quality-reviewer", "spec-reviewer", "test-reviewer"],
+        proposal: "Chunk {chunk.number}: {chunk.title}\n\nCHUNK SPEC:\n{chunk.spec}\n\nTEST RESULTS:\n{chunk_tests}\n\nCODE REVIEW:\n{review_findings}\n\nVote on this chunk:\n- \"approve\" if tests pass, spec is met, and review is clean\n- \"fix\" if there are fixable issues (will get another attempt)\n- \"reject\" if fundamentally broken",
+        options: ["approve", "fix", "reject"],
+    } -> review_consensus: map | continue;
+}

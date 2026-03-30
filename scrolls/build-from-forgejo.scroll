@@ -1,0 +1,23 @@
+// Complete pipeline: fetch epic from Forgejo and build the project
+
+scroll "build-from-forgejo" {
+    description: "Complete pipeline: fetch epic from Forgejo and build the project";
+
+    require epic_number: int;
+    require milestone_name: str;
+    require project_root: str = ".";
+    provide epic_result: map;
+
+    // Phase 1: ADAPTER — fetch epic metadata + story references
+    // Inlines epic-from-forgejo steps; sets 'epic' in context
+    run(scroll_path: "adapters/epic-from-forgejo.scroll", args: {
+        epic_number: epic_number,
+        milestone_name: milestone_name,
+    }) -> epic_adapter_result: map;
+
+    // Phase 2: EXECUTION — run stories one at a time, each fetching its own chunks
+    // 'epic' is already in context from phase 1
+    run(scroll_path: "run-epic.scroll", args: {
+        project_root: project_root,
+    }) -> epic_result: map;
+}

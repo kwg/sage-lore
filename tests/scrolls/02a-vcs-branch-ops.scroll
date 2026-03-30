@@ -1,0 +1,41 @@
+scroll: vcs-branch-ops-test
+description: "Test VCS branch and ref operations"
+
+steps:
+  # 1. Get current branch
+  - vcs:
+      operation: current_branch
+    output: current_branch
+
+  # 2. Check if main exists
+  - vcs:
+      operation: branch_exists
+      name: main
+    output: main_exists
+
+  # 3. Get HEAD commit
+  - vcs:
+      operation: head
+    output: head_sha
+
+  # 4. Get short HEAD
+  - vcs:
+      operation: head_short
+    output: head_short
+
+  # 5. Get status
+  - vcs:
+      operation: status
+    output: status
+
+  # 6. List tags
+  - vcs:
+      operation: list_tags
+    output: tags
+    on_fail: continue
+
+  # 7. Stash list (read-only)
+  - vcs:
+      operation: stash_list
+    output: stashes
+    on_fail: continue

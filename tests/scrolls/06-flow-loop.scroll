@@ -1,0 +1,46 @@
+scroll: flow-loop-test
+description: "Minimal test for loop primitive - iterate over items"
+
+steps:
+  # 1. Setup test directory
+  - fs:
+      operation: mkdir
+      path: .test-output/flow-loop
+    output: mkdir_result
+
+  # 2. Create files to iterate over
+  - fs:
+      operation: write
+      path: .test-output/flow-loop/file1.txt
+      content: "one"
+    output: write1
+
+  - fs:
+      operation: write
+      path: .test-output/flow-loop/file2.txt
+      content: "two"
+    output: write2
+
+  - fs:
+      operation: write
+      path: .test-output/flow-loop/file3.txt
+      content: "three"
+    output: write3
+
+  # 3. List the test directory
+  - fs:
+      operation: list
+      path: .test-output/flow-loop
+    output: test_files
+
+  # 4. Loop over items
+  - loop:
+      items: "${test_files}"
+      item_var: file
+      max: 3
+      operation:
+        - fs:
+            operation: exists
+            path: "${file}"
+          output: file_exists
+    output: loop_results

@@ -1,0 +1,30 @@
+# Test fixture: Scroll with missing security gates
+# Expected: exit code 2 (security gates missing)
+
+scroll: test-missing-gates
+description: "Test scroll missing required security gates"
+
+steps:
+  - transform: { input: state_file, schema: current_story, output: story }
+
+  # MISSING: Gate 1 (dependency_cve, allowlist)
+
+  # Task loop with implementer
+  - loop:
+      items: story.tasks
+      operation:
+        - invoke:
+            agent: implementer
+            context: [task]
+            output: impl_result
+
+        # MISSING: Gate 2 (secret_detection, static_analysis)
+
+        - validate:
+            input: test_results
+            criteria: all_pass
+
+  # MISSING: Gate 3 (sensitive_paths)
+
+  - invoke: { interface: git.commit }
+  - checkpoint: { label: story_complete, state: story }

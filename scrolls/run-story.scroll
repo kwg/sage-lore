@@ -1,0 +1,62 @@
+// Execute a story: resolve chunks, then implement each one
+
+scroll "run-story" {
+    description: "Execute a story: resolve chunks, then implement each one";
+
+    require story: map;
+    require project_root: str = ".";
+    provide story_result: map;
+
+    // Step 1: Do we have chunks?
+    // The story-from-forgejo adapter may return chunk data as:
+    // - chunk_numbers: [14, 15, 16] (from ChunkExtraction schema)
+    // - chunks: [{issue_number: 14, ...}, ...] (from LLM variation)
+    // Normalize to chunk_numbers for consistency with the original YAML pipeline
+    set chunk_numbers: map = if story.chunk_numbers { story.chunk_numbers } else { story.chunks };
+
+    if !chunk_numbers {
+        // No chunks — create them
+        run(scroll_path: "create-chunks.scroll", args: {
+            story_number: story.number,
+        }) -> create_result: map;
+
+        // Re-fetch story to get the new chunk_numbers
+        run(scroll_path: "adapters/story-from-forgejo.scroll", args: {
+            story_number: story.number,
+            epic_title: story.epic_title,
+        }) -> refetch_result: map;
+    };
+
+    // Step 2: Implement each chunk
+    // Re-normalize after potential re-fetch
+    chunk_numbers = if story.chunk_numbers { story.chunk_numbers } else { story.chunks };
+
+    set chunk_results: map[] = for chunk_ref in chunk_numbers {
+        // chunk_ref may be an integer (14) or object ({issue_number: 14, ...})
+        set chunk_number: int = if chunk_ref.issue_number { chunk_ref.issue_number } else { chunk_ref };
+
+        // Fetch chunk spec from Forgejo
+        run(scroll_path: "adapters/chunk-from-forgejo.scroll", args: {
+            chunk_number: chunk_number,
+            parent_story: story.title,
+        }) -> chunk_adapter_result: map;
+
+        // Implement the chunk (single LLM call)
+        run(scroll_path: "implement-chunk.scroll", args: {
+            project_root: project_root,
+        }) -> impl_result: map;
+
+        // Write files to disk
+        for file in implementation.files {
+            fs.write(path: "{project_root}/{file.path}", content: file.content);
+        };
+
+        // Test after each chunk
+        test.run() -> chunk_tests: map | continue;
+
+        impl_result
+    };
+
+    // Aggregate results
+    aggregate(results: [story, chunk_results], strategy: merge) -> story_result: map;
+}

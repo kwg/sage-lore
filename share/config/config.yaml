@@ -1,0 +1,32 @@
+# sage-lore default configuration
+# This file ships with the sage-lore package as the global tier defaults.
+# Override in ~/.config/sage-lore/config.yaml (user) or .sage-lore/config.yaml (project).
+
+llm:
+  backend: claude
+  context_limit: 100000
+
+  claude:
+    cheap: "claude-haiku-4-5-20251001"
+    standard: "claude-sonnet-4-6"
+    premium: "claude-opus-4-6"
+
+  ollama:
+    url: "http://localhost:11434"
+    cheap: "phi4-mini"
+    standard: "qwen2.5-coder:32b"
+    premium: "deepseek-r1:32b"
+    think: false
+
+test:
+  framework: auto
+  timeout_seconds: 300
+  max_output_chars: 50000
+  coverage:
+    min_lines_percent: 80
+    min_branches_percent: 70
+  flaky:
+    retry_count: 2
+
+state:
+  git_tracked: true

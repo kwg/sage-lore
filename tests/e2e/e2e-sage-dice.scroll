@@ -1,0 +1,30 @@
+// E2E test: Build sage-dice NLP Dice Roller from fixture data
+//
+// Self-contained test — no Forgejo required. Uses fixture files instead
+// of platform API calls. Tests the full pipeline: epic → stories → chunks
+// → implement → test → review → consensus.
+//
+// Usage:
+//   sage-lore run tests/e2e/e2e-sage-dice.scroll --project tests/e2e --var project_root=tests/e2e -v
+//
+// Requires: LLM backend (claude or ollama)
+//   Claude:  SAGE_LLM_BACKEND=claude (default, uses haiku for cheap tier)
+//   Ollama:  SAGE_LLM_BACKEND=ollama OLLAMA_URL=http://localhost:11434
+
+scroll "e2e-sage-dice" {
+    description: "E2E test: build sage-dice from fixture data (no Forgejo)";
+
+    require project_root: str = ".";
+    provide epic_result: map;
+
+    // Phase 1: Load epic from fixtures
+    run(scroll_path: "adapters/epic-from-fixtures.scroll", args: {
+        epic_number: 1,
+        milestone_name: "Epic #1: NLP Dice Roller",
+    }) -> epic_adapter_result: map;
+
+    // Phase 2: Execute the epic (stories → chunks → implement)
+    run(scroll_path: "run-epic-fixtures.scroll", args: {
+        project_root: project_root,
+    }) -> epic_result: map;
+}

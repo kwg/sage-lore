@@ -1,0 +1,7 @@
+// Using a keyword as a variable name
+scroll "bad" {
+    description: "Should fail";
+    require x: int;
+    provide y: int;
+    set for: int = 5;
+}

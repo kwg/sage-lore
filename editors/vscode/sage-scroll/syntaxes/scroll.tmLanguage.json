@@ -1,0 +1,193 @@
+{
+  "name": "Scroll Assembly",
+  "scopeName": "source.scroll",
+  "fileTypes": ["scroll"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#type-definition" },
+    { "include": "#scroll-block" },
+    { "include": "#keywords" },
+    { "include": "#primitives" },
+    { "include": "#operators" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#constants" },
+    { "include": "#types" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "//.*$",
+      "name": "comment.line.double-slash.scroll"
+    },
+    "type-definition": {
+      "begin": "\\b(type)\\s+([A-Z][a-zA-Z0-9_]*)\\s*\\{",
+      "beginCaptures": {
+        "1": { "name": "keyword.other.type.scroll" },
+        "2": { "name": "entity.name.type.scroll" }
+      },
+      "end": "\\}",
+      "patterns": [
+        { "include": "#comment" },
+        { "include": "#types" },
+        {
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*:",
+          "captures": {
+            "1": { "name": "variable.other.member.scroll" }
+          }
+        }
+      ]
+    },
+    "scroll-block": {
+      "begin": "\\b(scroll)\\s+",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.scroll.scroll" }
+      },
+      "end": "(?=\\{)",
+      "patterns": [
+        { "include": "#strings" }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(scroll|type|require|provide|description|set)\\b",
+          "name": "keyword.other.scroll"
+        },
+        {
+          "match": "\\b(if|else|for|in|while|match|break|concurrent)\\b",
+          "name": "keyword.control.scroll"
+        },
+        {
+          "match": "\\b(continue|retry|fallback)\\b",
+          "name": "keyword.control.error-handling.scroll"
+        }
+      ]
+    },
+    "primitives": {
+      "patterns": [
+        {
+          "match": "\\b(platform|fs|vcs|test)\\s*\\.",
+          "captures": {
+            "1": { "name": "support.class.primitive.scroll" }
+          }
+        },
+        {
+          "match": "\\b(invoke|parallel|consensus|run|elaborate|distill|validate|convert|aggregate)\\b(?=\\s*\\()",
+          "name": "support.function.primitive.scroll"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "match": "->",
+          "name": "keyword.operator.binding.scroll"
+        },
+        {
+          "match": "\\|(?!\\|)",
+          "name": "keyword.operator.error-chain.scroll"
+        },
+        {
+          "match": "\\?\\?",
+          "name": "keyword.operator.null-coalesce.scroll"
+        },
+        {
+          "match": "\\+\\+(?!=)",
+          "name": "keyword.operator.concat.scroll"
+        },
+        {
+          "match": "\\+\\+=",
+          "name": "keyword.operator.append-assign.scroll"
+        },
+        {
+          "match": "=>",
+          "name": "keyword.operator.match-arm.scroll"
+        },
+        {
+          "match": "&&|\\|\\|",
+          "name": "keyword.operator.logical.scroll"
+        },
+        {
+          "match": "==|!=|>=|<=|>|<",
+          "name": "keyword.operator.comparison.scroll"
+        },
+        {
+          "match": "\\+=|-=",
+          "name": "keyword.operator.compound-assign.scroll"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.scroll",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.scroll",
+              "match": "\\\\[\"\\\\nrt{}0]"
+            },
+            {
+              "name": "meta.interpolation.scroll",
+              "begin": "\\{",
+              "end": "\\}",
+              "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.scroll" } },
+              "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.scroll" } },
+              "patterns": [
+                { "include": "#identifiers" },
+                { "include": "#operators" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.raw.scroll",
+          "begin": "`",
+          "end": "`"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b[0-9]+\\.[0-9]+\\b",
+          "name": "constant.numeric.float.scroll"
+        },
+        {
+          "match": "\\b[0-9]+\\b",
+          "name": "constant.numeric.integer.scroll"
+        }
+      ]
+    },
+    "constants": {
+      "match": "\\b(true|false|null)\\b",
+      "name": "constant.language.scroll"
+    },
+    "types": {
+      "patterns": [
+        {
+          "match": "\\b(str|int|float|bool|map)\\b",
+          "name": "support.type.primitive.scroll"
+        },
+        {
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
+          "name": "entity.name.type.scroll"
+        },
+        {
+          "match": "\\[\\]",
+          "name": "keyword.operator.array-type.scroll"
+        },
+        {
+          "match": "\\?(?!\\?)",
+          "name": "keyword.operator.nullable-type.scroll"
+        }
+      ]
+    },
+    "identifiers": {
+      "match": "\\b[a-z_][a-zA-Z0-9_]*\\b",
+      "name": "variable.other.scroll"
+    }
+  }
+}

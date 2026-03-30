@@ -1,0 +1,24 @@
+scroll: test-merge-production
+description: Test merge primitive with production backend
+
+requires:
+  input1:
+    type: string
+    default: "Python is great for data science and machine learning."
+  input2:
+    type: string
+    default: "Rust is excellent for systems programming and performance."
+  input3:
+    type: string
+    default: "JavaScript dominates web development and has a huge ecosystem."
+
+steps:
+  - merge:
+      inputs:
+        - ${input1}
+        - ${input2}
+        - ${input3}
+      strategy: sequential
+      output_contract:
+        format: prose
+    output: result

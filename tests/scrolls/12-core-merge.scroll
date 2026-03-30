@@ -1,0 +1,27 @@
+scroll: core-merge-test
+description: "Test for merge primitive - combine inputs with strategy"
+
+requires:
+  requirement:
+    type: string
+    description: "Feature requirement"
+    default: "Users can log in with email"
+  constraint:
+    type: string
+    description: "Technical constraint"
+    default: "Must use OAuth 2.0"
+  context:
+    type: string
+    description: "Application context"
+    default: "Mobile-first application"
+
+steps:
+  - merge:
+      inputs:
+        - ${requirement}
+        - ${constraint}
+        - ${context}
+      strategy: sequential
+      output_contract:
+        format: prose
+    output: merged_result

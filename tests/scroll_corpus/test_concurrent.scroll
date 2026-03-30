@@ -1,0 +1,29 @@
+// Concurrent execution: concurrent block and concurrent for
+type Impl {
+    code: str,
+}
+
+scroll "concurrent-test" {
+    description: "Tests concurrency syntax";
+
+    require chunks: int[];
+    require issue_1: int;
+    require issue_2: int;
+    provide results: Impl[];
+
+    // Concurrent block — heterogeneous parallel operations
+    concurrent {
+        platform.get_issue(number: issue_1) -> first_issue: map;
+        platform.get_issue(number: issue_2) -> second_issue: map;
+        fs.read(path: "README.md") -> readme: str;
+    };
+
+    // Concurrent for — homogeneous parallel iterations
+    set results: Impl[] = concurrent for chunk_num in chunks {
+        invoke(agent: "dev", instructions: "Implement chunk") {
+            context: [chunk_num],
+            schema: Impl,
+        } -> impl_result: Impl;
+        impl_result
+    };
+}

@@ -1,0 +1,28 @@
+// Adapter: Load chunk from fixture files (no Forgejo needed)
+// Drop-in replacement for chunk-from-forgejo.scroll
+
+scroll "chunk-from-fixtures" {
+    description: "Adapter: Load chunk spec from fixture files";
+
+    require chunk_number: int;
+    require parent_story: str;
+    provide chunk: map;
+
+    // Read issue fixture
+    fs.read(path: "fixtures/issue-{chunk_number}.json") -> raw_json: str;
+    convert(input: raw_json, to: "json") -> raw_issue: map;
+
+    // Read pre-extracted metadata (complexity and files already extracted, no LLM needed)
+    fs.read(path: "fixtures/chunk-{chunk_number}-meta.json") -> meta_json: str;
+    convert(input: meta_json, to: "json") -> meta: map;
+
+    // Build chunk from fixture data + metadata
+    set chunk: map = {
+        title: raw_issue.title,
+        number: raw_issue.number,
+        parent_story: parent_story,
+        spec: raw_issue.body,
+        complexity: meta.complexity,
+        files: meta.files,
+    };
+}

@@ -1,0 +1,38 @@
+{
+  "name": "sage-scroll",
+  "displayName": "Scroll Assembly Language",
+  "description": "Syntax highlighting, snippets, and LSP support for SAGE Scroll Assembly (.scroll) files",
+  "version": "0.1.0",
+  "publisher": "sage-method",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:scroll"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "scroll",
+      "aliases": ["Scroll Assembly", "scroll"],
+      "extensions": [".scroll"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "scroll",
+      "scopeName": "source.scroll",
+      "path": "./syntaxes/scroll.tmLanguage.json"
+    }],
+    "snippets": [{
+      "language": "scroll",
+      "path": "./snippets/scroll.json"
+    }],
+    "configuration": {
+      "title": "Scroll Assembly",
+      "properties": {
+        "scroll.lsp.path": {
+          "type": "string",
+          "default": "sage-lore",
+          "description": "Path to the sage-lore binary (for LSP server)"
+        }
+      }
+    }
+  }
+}

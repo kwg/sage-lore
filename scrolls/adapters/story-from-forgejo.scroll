@@ -1,0 +1,56 @@
+// Adapter: Fetch Forgejo story issue and return story metadata + chunk references
+
+type ChunkExtraction {
+    chunk_numbers: int[],
+}
+
+scroll "story-from-forgejo" {
+    description: "Adapter: Fetch Forgejo story issue and return story metadata + chunk references";
+
+    require story_number: int;
+    require epic_title: str;
+    provide story: map;
+
+    // Fetch story issue from Forgejo
+    platform.get_issue(number: story_number) -> raw_issue: map;
+
+    // Phase 1: LLM extracts ONLY what requires fuzzy parsing from the issue body.
+    // chunk_numbers must be extracted from the Chunks table in the story body.
+    // body is already available as raw_issue.body — don't waste LLM tokens echoing it.
+    invoke(agent: "platform-interpreter", instructions: "Extract chunk issue numbers from this story issue body") {
+        context: [raw_issue.body],
+        schema: ChunkExtraction,
+        timeout: 300,
+    } -> llm_fields: ChunkExtraction;
+
+    // Phase 1b: Consensus verification — 3 agents independently verify extraction
+    // Catches wrong chunk list or missing chunk references
+    consensus(mechanism: "vote", threshold: majority) {
+        agents: ["extraction-verifier-1", "extraction-verifier-2", "extraction-verifier-3"],
+        proposal: "An LLM extracted chunk issue numbers from this story issue body.\n\nSTORY BODY:\n{raw_issue.body}\n\nEXTRACTED RESULT:\n{llm_fields}\n\nDoes the extracted chunk_numbers list contain the correct issue numbers?\n\nCheck:\n- Chunks table or chunk references in the story body\n- That all referenced chunk numbers are included\n- That no issue numbers were invented or omitted\n- That the order matches the story's intended sequence\n\nVote \"approve\" if the extraction is correct.\nVote \"reject\" if the numbers are wrong or incomplete.",
+        options: ["approve", "reject"],
+    } -> extraction_consensus: map;
+
+    // Phase 2: Engine constructs known fields (no LLM needed)
+    // body comes directly from the API — no reason for the LLM to echo it
+    set known_fields: map = {
+        number: raw_issue.number,
+        title: raw_issue.title,
+        epic_title: epic_title,
+        body: raw_issue.body,
+    };
+
+    // Phase 3: Merge LLM-extracted + engine-known fields
+    aggregate(results: [llm_fields, known_fields], strategy: merge) -> story: map;
+
+    validate(input: story) {
+        criteria: [
+            "Has number field (number)",
+            "Has title field (string)",
+            "Has body field (string)",
+            "Has epic_title field (string)",
+            "Has chunk_numbers field (sequence of numbers)",
+        ],
+        mode: strict,
+    } -> contract_validation: map | continue;
+}

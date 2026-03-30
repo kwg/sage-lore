@@ -1,0 +1,42 @@
+# Test fixture: Valid scroll with all required gates
+# Expected: exit code 0 (valid)
+
+scroll: test-valid
+description: "Test scroll with all security gates properly placed"
+
+steps:
+  - transform: { input: state_file, schema: current_story, output: story }
+
+  # GATE 1: Before implementation
+  - secure:
+      input: story.dependencies
+      scan_type: [dependency_cve, allowlist]
+      policy: block
+
+  # Task loop with implementer
+  - loop:
+      items: story.tasks
+      operation:
+        - invoke:
+            agent: implementer
+            context: [task]
+            output: impl_result
+
+        # GATE 2: After code generation (inside loop)
+        - secure:
+            input: impl_result.files
+            scan_type: [secret_detection, static_analysis]
+            policy: block
+
+        - validate:
+            input: test_results
+            criteria: all_pass
+
+  # GATE 3: Before commit
+  - secure:
+      input: git.staged_diff
+      scan_type: [secret_detection, sensitive_paths]
+      policy: block
+
+  - invoke: { interface: git.commit }
+  - checkpoint: { label: story_complete, state: story }

@@ -1,0 +1,35 @@
+// Execute a story using fixture adapters (no Forgejo)
+
+scroll "run-story-fixtures" {
+    description: "Execute a story: load chunks from fixtures, implement each one";
+
+    require story: map;
+    require project_root: str = ".";
+    provide story_result: map;
+
+    // chunk_numbers comes from the fixture adapter as a clean int array
+    set chunk_results: map[] = for chunk_number in story.chunk_numbers {
+        // Fetch chunk from fixtures
+        run(scroll_path: "adapters/chunk-from-fixtures.scroll", args: {
+            chunk_number: chunk_number,
+            parent_story: story.title,
+        }) -> chunk_adapter_result: map;
+
+        // Implement the chunk (LLM call)
+        run(scroll_path: "implement-chunk.scroll", args: {
+            project_root: project_root,
+        }) -> impl_result: map;
+
+        // Write files to disk
+        for file in implementation.files {
+            fs.write(path: "{project_root}/{file.path}", content: file.content);
+        };
+
+        // Test after each chunk
+        test.run() -> chunk_tests: map | continue;
+
+        impl_result
+    };
+
+    aggregate(results: [story, chunk_results], strategy: merge) -> story_result: map;
+}

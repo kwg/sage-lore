@@ -1,0 +1,17 @@
+scroll: test-validate-production
+description: Test validate primitive with production backend
+
+requires:
+  input_text:
+    type: string
+    default: "The sky is blue because of Rayleigh scattering of sunlight in the atmosphere."
+
+steps:
+  - validate:
+      input: ${input_text}
+      criteria:
+        - "Statement is factually accurate"
+        - "Statement is grammatically correct"
+        - "Statement provides a scientific explanation"
+      mode: strict
+    output: result

@@ -1,0 +1,45 @@
+// All operators from the spec summary table
+scroll "operator-test" {
+    description: "Tests all operators";
+
+    require input: int;
+    provide result: bool;
+
+    // Arithmetic
+    set a: int = 5 + 3;
+    set b: int = 10 - 2;
+
+    // Map merge
+    set base: map = { x: 1, y: 2 };
+    set extra: map = { y: 3, z: 4 };
+    set merged: map = base + extra;
+
+    // Array concatenation
+    set first: str[] = ["a", "b"];
+    set second: str[] = ["c", "d"];
+    set all: str[] = first ++ second;
+
+    // Comparison
+    set gt: bool = a > b;
+    set lt: bool = a < b;
+    set gte: bool = a >= 5;
+    set lte: bool = b <= 10;
+
+    // Equality
+    set eq: bool = a == 8;
+    set neq: bool = a != 0;
+
+    // Logical
+    set both: bool = gt && lt;
+    set either: bool = gt || lt;
+    set negated: bool = !gt;
+
+    // Null coalescing
+    set maybe: str? = null;
+    set safe: str = maybe ?? "default";
+
+    // Field access
+    set val: int = base.x;
+
+    set result: bool = eq;
+}

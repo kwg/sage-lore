@@ -1,0 +1,46 @@
+// Control flow: if/else, match, for, while, break
+type Chunk {
+    number: int,
+    title: str,
+}
+
+scroll "control-flow-test" {
+    description: "Tests control flow constructs";
+
+    require chunks: Chunk[];
+    require threshold: int;
+    provide results: str[];
+
+    // If/else statement
+    set mode: str = "default";
+    if threshold > 10 {
+        mode = "high";
+    } else {
+        mode = "low";
+    };
+
+    // If/else if/else
+    if threshold > 100 {
+        mode = "extreme";
+    } else if threshold > 50 {
+        mode = "very_high";
+    } else {
+        mode = "normal";
+    };
+
+    // While loop with break
+    set attempts: int = 0;
+    while attempts < 3 {
+        attempts += 1;
+        if attempts == 2 {
+            break;
+        };
+    };
+
+    // For loop as statement
+    for chunk in chunks {
+        platform.close_issue(number: chunk.number);
+    };
+
+    set results: str[] = ["done"];
+}
