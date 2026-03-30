@@ -1,11 +1,8 @@
 # Primitive Reference
 
-> **Note**: This document shows YAML syntax from v0.x. As of v1.0-beta, scrolls use
-> **Scroll Assembly** syntax — a strongly-typed language with explicit types, blocks-as-expressions,
-> and composable error handling. See `src/scroll/assembly/scroll_assembly.pest` for the formal grammar
-> and `tests/scroll_corpus/` for examples. A full rewrite of this doc to Assembly syntax is tracked in #179.
-
 sage-lore provides 20 orthogonal primitives for LLM orchestration. Each primitive has a single responsibility and composes cleanly with others.
+
+All examples use **Scroll Assembly** syntax. See `src/scroll/assembly/scroll_assembly.pest` for the formal grammar.
 
 ## Design Principles
 
@@ -17,22 +14,19 @@ sage-lore provides 20 orthogonal primitives for LLM orchestration. Each primitiv
 
 ## Scroll Structure
 
-```yaml
-scroll: name
-description: "What this scroll does"
+```
+scroll "name" {
+    description: "What this scroll does";
 
-requires:                    # Optional — input variables
-  var_name:
-    type: string
-    description: "What this variable is"
-    default: "fallback value"
+    require var_name: str;                  // Input variables
+    require count: int = 5;                 // With defaults
+    provide result: map;                    // Output variables
 
-steps:
-  - primitive_name:
-      param: value
-      param: ${var_ref}      # Variable interpolation
-    output: result_name      # Binds result for later steps
-    on_fail: halt            # Error handling (halt|continue|retry|fallback)
+    // Body — ordered statements
+    platform.get_issue(number: issue_num) -> raw_issue: map;
+    invoke(agent: "dev", instructions: "...") { context: [raw_issue]; } -> impl: map;
+    set result: map = { title: raw_issue.title, code: impl.code };
+}
 ```
 
 ---
@@ -43,29 +37,21 @@ Transform and manipulate information within the scroll context.
 
 ### elaborate
 
-Expands high-level descriptions into detailed content. Includes deterministic output validation (length, format) with retry on failure.
+Expands high-level descriptions into detailed content. Deterministic output validation with retry on failure.
 
-```yaml
-- elaborate:
-    input: ${brief_spec}
-    depth: thorough           # thorough | balanced | concise
-    output_contract:
-      length: paragraph       # sentence | paragraph | page
-      format: prose           # prose | structured | list
-    context:                  # Optional — arbitrary JSON passed to prompt
-      role: "system architect"
-      task: "expand into detailed design"
-  output: detailed_design
+```
+elaborate(input: brief_spec, depth: thorough) {
+    output_contract: { length: "paragraph", format: "prose" },
+    context: { role: "system architect", task: "expand into detailed design" },
+} -> detailed_design: map;
 ```
 
 **Parameters**:
 - `input` (required): Text or variable to elaborate
-- `depth`: How much detail to add — `thorough`, `balanced` (default), `concise`
+- `depth`: `thorough`, `balanced` (default), `concise`
 - `output_contract`: Constrain output length and format
 - `context`: Additional JSON context included in the prompt
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends)
-
-**Use cases**: Requirements → design docs, outlines → full text, brief → detailed
+- `tier`, `model`: See [LLM Backends](#llm-backends)
 
 ---
 
@@ -73,26 +59,19 @@ Expands high-level descriptions into detailed content. Includes deterministic ou
 
 Reduces verbose content to essential information. Inverse of elaborate.
 
-```yaml
-- distill:
-    input: ${verbose_logs}
-    intensity: aggressive     # aggressive | balanced | minimal
-    output_contract:
-      length: sentence        # keywords | phrase | sentence | paragraph
-      format: prose           # prose | bullets | keywords
-    context:
-      preserve: "error codes and timestamps"
-  output: summary
+```
+distill(input: verbose_logs, intensity: aggressive) {
+    output_contract: { length: "sentence", format: "prose" },
+    context: { preserve: "error codes and timestamps" },
+} -> summary: str;
 ```
 
 **Parameters**:
 - `input` (required): Text to reduce
-- `intensity`: How aggressively to compress — `aggressive`, `balanced` (default), `minimal`
+- `intensity`: `aggressive`, `balanced` (default), `minimal`
 - `output_contract`: Constrain output length and format
 - `context`: Additional JSON context
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends)
-
-**Use cases**: Log analysis, documentation summarization, executive summaries
+- `tier`, `model`: See [LLM Backends](#llm-backends)
 
 ---
 
@@ -100,38 +79,23 @@ Reduces verbose content to essential information. Inverse of elaborate.
 
 Breaks content into constituent parts.
 
-```yaml
-- split:
-    input: ${epic_description}
-    by: semantic               # semantic | structure | count
-    granularity: coarse        # coarse | medium | fine
-  output: parts
+```
+// Semantic split
+split(input: epic_description, by: "semantic", granularity: "coarse") -> parts: map[];
 
-# Count-based split
-- split:
-    input: ${document}
-    by: count
-    count: 5
-  output: chunks
+// Count-based split
+split(input: document, by: "count", count: 5) -> chunks: map[];
 
-# Structure-based split
-- split:
-    input: ${markdown_doc}
-    by: structure
-    markers: headers           # headers | paragraphs | sentences | bullets
-  output: sections
+// Structure-based split
+split(input: markdown_doc, by: "structure", markers: "headers") -> sections: map[];
 ```
 
 **Parameters**:
 - `input` (required): Content to split
-- `by`: Split strategy — `semantic` (default), `structure`, `count`
-- `granularity`: For semantic splits — `coarse`, `medium` (default), `fine`
+- `by`: `semantic` (default), `structure`, `count`
+- `granularity`: For semantic — `coarse`, `medium` (default), `fine`
 - `count`: For count splits — exact number of parts
-- `markers`: For structure splits — `headers`, `paragraphs`, `sentences`, `bullets`
-- `context`: Additional JSON context
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends). Auto-gen schema enforces `[{id, content, label?}]`.
-
-**Use cases**: Epic → stories, documents → sections, batch processing prep
+- `markers`: For structure — `headers`, `paragraphs`, `sentences`, `bullets`
 
 ---
 
@@ -139,113 +103,71 @@ Breaks content into constituent parts.
 
 Combines multiple inputs into a unified result.
 
-```yaml
-- merge:
-    inputs:
-      - ${frontend_design}
-      - ${backend_api}
-      - ${database_schema}
-    strategy: sequential       # sequential | reconcile | union | intersection
-    output_contract:
-      format: structured       # prose | structured | list
-  output: system_design
+```
+merge(inputs: [frontend_design, backend_api, database_schema], strategy: "reconcile") {
+    output_contract: { format: "structured" },
+} -> system_design: map;
 ```
 
 **Parameters**:
-- `inputs` (required): Array of variable references (min 2, max 10)
-- `strategy`: How to combine — `sequential` (default, in order), `reconcile` (resolve conflicts), `union` (all unique points), `intersection` (only common points)
+- `inputs` (required): Array of variables (min 2, max 10)
+- `strategy`: `sequential` (default), `reconcile`, `union`, `intersection`
 - `output_contract`: Constrain output format
-- `context`: Additional JSON context
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends)
-
-**Use cases**: Multi-source integration, assembling artifacts from parts
 
 ---
 
 ### validate
 
-Verifies content against criteria. Returns structured pass/fail with per-criterion results.
+Verifies content against criteria. Returns structured pass/fail.
 
-```yaml
-- validate:
-    input: ${generated_code}
-    criteria:
-      - "Function has a return type"
-      - "Function takes two parameters"
-      - "Error handling is present"
-    mode: strict               # strict | majority | any
-    reference: ${specification} # Optional — reference to validate against
-  output: validation_result
+```
+validate(input: generated_code, reference: specification) {
+    criteria: [
+        "Function has a return type",
+        "Error handling is present",
+    ],
+    mode: strict,
+} -> validation: map;
+
+// Use result in branch
+if validation.result == "pass" {
+    // proceed
+};
 ```
 
 **Parameters**:
 - `input` (required): Content to validate
-- `criteria` (required): List of criteria strings or JSON array
-- `mode`: How many criteria must pass — `strict` (all, default), `majority` (>50%), `any` (at least one)
-- `reference`: Optional reference content to validate against
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends). Auto-gen schema enforces `{result, score, criteria_results, summary}`.
+- `criteria` (required): List of criteria strings
+- `mode`: `strict` (all, default), `majority`, `any`
+- `reference`: Optional reference to validate against
 
-**Output structure**:
-```json
-{
-  "result": "pass",
-  "score": 1.0,
-  "criteria_results": [
-    {"criterion": "...", "passed": true, "explanation": "..."}
-  ],
-  "summary": "All criteria passed"
-}
-```
-
-**Return behavior**: Validate always returns the full result object (with `result`, `score`, `criteria_results`, `summary`), whether pass or fail. Use `${validation_result.score}` or `${validation_result.result}` in branch conditions to gate on outcomes.
-
-**Use cases**: Quality gates, requirement verification, content review
+**Output**: `{ result: "pass"|"fail", score: float, criteria_results: [...], summary: str }`
 
 ---
 
 ### convert
 
-Transforms content between formats, optionally constrained by a JSON schema. Includes fast paths for json→json and yaml→yaml (no LLM call when input parses locally). Retries up to 3 times on validation failures.
+Transforms content between formats, optionally constrained by a JSON schema.
 
-```yaml
-# Simple format conversion
-- convert:
-    input: ${data}
-    from: yaml
-    to: json
-  output: json_data
+```
+// Simple conversion
+convert(input: data, to: "json") -> json_data: map;
 
-# Schema-constrained extraction
-- convert:
-    input: ${large_yaml}
-    from: yaml
-    to:
-      format: json
-      schema:
-        type: object
-        properties:
-          name:
-            type: string
-          count:
-            type: integer
-        required:
-          - name
-    context:
-      instructions: "Extract only the relevant fields"
-  output: extracted_data
+// Schema-constrained extraction
+convert(input: raw_text, to: "json", schema: {
+    type: "object",
+    properties: { name: { type: "string" }, count: { type: "integer" } },
+    required: ["name"],
+}) -> extracted: map;
 ```
 
 **Parameters**:
 - `input` (required): Content to convert
-- `to` (required): Target — simple string (`"json"`, `"yaml"`, `"markdown"`, `"prose"`, `"csv"`, `"xml"`) or object with `format` + `schema`
+- `to` (required): Target format — `"json"`, `"yaml"`, `"markdown"`, `"prose"`, `"csv"`, `"xml"`
 - `from`: Source format hint (auto-detected if omitted)
-- `coercion`: Type coercion mode — `auto` (default, coerces obvious mismatches), `strict` (fail on mismatch)
-- `context`: Additional JSON context included in the prompt
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends)
+- `schema`: JSON Schema to validate output against
 
-**Fast paths**: When `to: json` and input starts with `{`/`[`, the engine parses locally (no LLM call). Same for `from: yaml` + `to: yaml`. Schema validation still applies. Falls through to LLM if local parse fails.
-
-**Use cases**: Format conversion, structured extraction from documents, schema migration
+**Fast paths**: When `to: "json"` and input starts with `{`/`[`, the engine parses locally (no LLM call). Same for `from: "yaml"` + `to: "yaml"`. Falls through to LLM if local parse fails.
 
 ---
 
@@ -255,45 +177,15 @@ Interact with the external environment.
 
 ### fs
 
-Filesystem operations. All operations are policy-enforced (allowlist/denylist, path traversal prevention, file type restrictions).
+Filesystem operations. All operations are policy-enforced (allowlist/denylist, path traversal prevention, extension restrictions).
 
-```yaml
-# Read a file
-- fs:
-    operation: read
-    path: ./config.yaml
-  output: config_content
-
-# Write a file
-- fs:
-    operation: write
-    path: ./output.json
-    content: ${result}
-  output: write_result
-
-# Check existence
-- fs:
-    operation: exists
-    path: ./config.yaml
-  output: file_exists
-
-# List directory
-- fs:
-    operation: list
-    path: ./src
-  output: source_files
-
-# Create directory
-- fs:
-    operation: mkdir
-    path: ./output
-  output: mkdir_result
-
-# Delete a file
-- fs:
-    operation: delete
-    path: ./temp.txt
-  output: delete_result
+```
+fs.read(path: "src/main.rs") -> content: str;
+fs.write(path: "output.json", content: result);
+fs.exists(path: "config.yaml") -> has_config: bool;
+fs.list(path: "src") -> entries: str[];
+fs.mkdir(path: "output");
+fs.delete(path: "temp.txt");
 ```
 
 **Operations**: `read`, `write`, `exists`, `list`, `mkdir`, `delete`, `copy`, `move`
@@ -304,25 +196,13 @@ Filesystem operations. All operations are policy-enforced (allowlist/denylist, p
 
 Version control operations.
 
-```yaml
-- vcs:
-    operation: status
-  output: git_status
-
-- vcs:
-    operation: commit
-    message: "feat: add new feature"
-    files:
-      - src/new_feature.rs
-
-- vcs:
-    operation: diff
-  output: changes
-
-- vcs:
-    operation: log
-    count: 5
-  output: recent_commits
+```
+vcs.status() -> status: map;
+vcs.commit(message: "feat: add new feature");
+vcs.diff() -> changes: str;
+vcs.log(count: 5) -> recent: map[];
+vcs.branch(name: "feature-branch");
+vcs.add(files: ["src/main.rs", "src/lib.rs"]);
 ```
 
 **Operations**: `status`, `commit`, `diff`, `log`, `branch`, `checkout`, `add`, `merge`, `tag`, `stash`, `remote`, `reset`, `refs`
@@ -333,20 +213,10 @@ Version control operations.
 
 Test execution with auto-detection of test frameworks.
 
-```yaml
-- test:
-    operation: run
-    pattern: "tests/integration/*"
-  output: test_results
-
-- test:
-    operation: coverage
-    config:
-      min_coverage: 80
-  output: coverage_report
 ```
-
-**Operations**: `run`, `coverage`
+test.run() -> results: map;
+test.run(filter: "test_parser") -> filtered: map;
+```
 
 **Auto-detected backends**: cargo, npm, jest, pytest, go test, make, bats, vitest
 
@@ -354,42 +224,41 @@ Test execution with auto-detection of test frameworks.
 
 ### platform
 
-Platform information and environment queries.
+Git forge operations (Forgejo, with adapter pattern for GitHub/GitLab).
 
-```yaml
-- platform:
-    operation: info
-  output: system_info
-
-- platform:
-    operation: env
-    var: API_KEY
-  output: api_key
-
-- platform:
-    operation: check
-    command: docker
-  output: has_docker
+```
+platform.get_issue(number: 42) -> issue: map;
+platform.create_issue(title: "Bug fix", body: spec, labels: ["type:bug"]) -> new_issue: map;
+platform.list_issues(state: "open", labels: ["type:story"]) -> stories: map[];
+platform.close_issue(number: 42);
+platform.env(var: "API_KEY") -> key: str;
+platform.info() -> system: map;
 ```
 
-**Operations**: `info`, `env`, `check`
+**Operations**: `get_issue`, `create_issue`, `update_issue`, `close_issue`, `list_issues`, `env`, `info`
 
 ---
 
 ### run
 
-Execute another scroll (scroll composition).
+Execute another scroll (scroll composition). Resolves via three-tier search path: project -> user -> global.
 
-```yaml
-- run:
-    scroll_path: scrolls/validate.scroll
-  output: subscroll_result
+```
+// By name (search path resolves it)
+run("adapters/story-from-forgejo") {
+    story_number: story.number,
+    epic_title: epic.title,
+} -> story: map;
+
+// Direct path
+run("./local-scroll.scroll") -> result: map;
 ```
 
 **Parameters**:
-- `scroll_path` (required): Path to the scroll to execute
+- First argument: scroll name or path
+- Block: variables to pass as inputs to the subscroll
 
-**Use cases**: Modular workflows, reusable scroll libraries
+**Resolution**: Bare names search `.sage-lore/scrolls/` -> `~/.config/sage-lore/scrolls/` -> `$SAGE_LORE_DATADIR/scrolls/`. Paths starting with `./` or `/` resolve directly.
 
 ---
 
@@ -399,25 +268,27 @@ Invoke and coordinate LLM agents.
 
 ### invoke
 
-Execute a single agent with a specific prompt.
+Execute a single agent call. The agent runs via `claude -p` with read-only tools and returns structured output.
 
-```yaml
-- invoke:
-    agent: analyst
-    prompt: "Review ${diff} for security issues"
-    context:
-      - ${coding_standards}
-      - ${security_policy}
-  output: review_comments
+```
+invoke(agent: "dev", instructions: "Implement chunk {chunk.number}") {
+    context: [chunk, project_root],
+    schema: Implementation,
+    tier: premium,
+    timeout: 600,
+} -> raw_impl: map;
 ```
 
 **Parameters**:
-- `agent` (required): Agent identifier
-- `prompt` (required): The prompt to send
-- `context`: Optional list of additional context values
-- `backend`, `model_tier`, `model`, `format_schema`: See [LLM Backends](#llm-backends)
+- `agent` (required): Agent name (resolved from agents/ directory)
+- `instructions` (required): Task prompt with `{var}` interpolation
+- `context`: Array of variables passed as context
+- `schema`: Expected output type
+- `tier`: `cheap`, `standard`, `premium` (maps to configured models)
+- `model`: Explicit model name (overrides tier)
+- `timeout`: Seconds before timeout
 
-**Multi-backend**: invoke uses the configured LLM backend — `ClaudeCliBackend` (production, shells out to `claude -p`), `OllamaBackend` (local LLMs via Ollama API), or `MockLlmBackend` (testing with canned responses).
+**Backends**: `ClaudeCliBackend` (production, `claude -p`), `OllamaBackend` (local LLMs), `MockLlmBackend` (testing)
 
 ---
 
@@ -425,58 +296,39 @@ Execute a single agent with a specific prompt.
 
 Fan out the same prompt to multiple agents for diverse perspectives.
 
-```yaml
-- parallel:
-    agents:
-      - claude_sonnet
-      - claude_opus
-      - local_llama
-    prompt: "Analyze ${incident_report}"
-    max_concurrent: 3
-    on_fail: require_quorum
-    quorum: 2
-  output: analysis_results
+```
+parallel(agents: ["analyst-1", "analyst-2", "analyst-3"], prompt: "Analyze {report}") {
+    max_concurrent: 3,
+    quorum: 2,
+} -> analyses: map[];
 ```
 
 **Parameters**:
 - `agents` (required): List of agent identifiers
 - `prompt` (required): Prompt sent to all agents
 - `max_concurrent`: Maximum concurrent invocations
-- `on_fail`: Error strategy — `require_quorum` allows partial failure
 - `quorum`: Minimum successful responses required
-
-**Failure modes**: `require_all` (default), `require_quorum`, `best_effort`
 
 ---
 
 ### consensus
 
-Achieve agreement among agents on a decision via voting.
+Achieve agreement among agents via voting.
 
-```yaml
-- consensus:
-    agents:
-      - security_expert
-      - performance_expert
-      - maintainability_expert
-    proposal: "Should we refactor ${module}?"
-    mechanism: weighted_vote
-    options:
-      - refactor_now
-      - refactor_later
-      - keep_as_is
-    threshold: majority        # majority | supermajority | unanimous | N (numeric)
-  output: decision
+```
+consensus(mechanism: "vote", threshold: majority) {
+    agents: ["reviewer-1", "reviewer-2", "reviewer-3"],
+    proposal: "Is this implementation correct? {raw_impl}",
+    options: ["approve", "reject"],
+} -> vote: map;
 ```
 
 **Parameters**:
+- `mechanism` (required): `"vote"`
 - `agents` (required): Voting agents
 - `proposal` (required): What to vote on
-- `mechanism` (required): Voting mechanism (e.g., `weighted_vote`)
 - `options` (required): Available choices
-- `threshold`: Agreement threshold — `majority` (default), `supermajority`, `unanimous`, or numeric (e.g., `2`)
-
-**No built-in consensus**: Core primitives do NOT include automatic consensus validation. If you want consensus on a step's output, add a `consensus` step explicitly. This keeps primitives fast and gives scroll designers control over when consensus is worth the cost.
+- `threshold`: `majority` (default), `supermajority`, `unanimous`, or numeric
 
 ---
 
@@ -484,103 +336,55 @@ Achieve agreement among agents on a decision via voting.
 
 Run different operations simultaneously (operation parallelism, not agent parallelism).
 
-```yaml
-- concurrent:
-    operations:
-      - test:
-          operation: run
-      - secure:
-          scan_type: secret_detection
-      - vcs:
-          operation: status
-    timeout: 300
-  output: parallel_results
 ```
-
-**Parameters**:
-- `operations` (required): List of steps to run in parallel
-- `timeout`: Optional timeout in seconds
-
-**Use cases**: Independent operations (test + lint + scan), performance optimization
+concurrent {
+    test.run() -> test_results: map;
+    vcs.status() -> git_status: map;
+};
+```
 
 ---
 
 ## Flow Control (3)
 
-Control execution flow within scrolls.
-
-### branch
+### if / else
 
 Conditional execution based on runtime values.
 
-```yaml
-- branch:
-    condition: "${has_cargo}"
-    if_true:
-      - fs:
-          operation: read
-          path: Cargo.toml
-        output: cargo_contents
-    if_false:
-      - fs:
-          operation: write
-          path: .test-output/no-cargo.txt
-          content: "No Cargo.toml found"
-  output: branch_result
 ```
-
-**Parameters**:
-- `condition` (required): Expression evaluated at runtime (supports `${var}`, comparisons)
-- `if_true` (required): Steps when condition is truthy
-- `if_false`: Steps when condition is falsy (optional)
+if story.chunk_numbers {
+    set chunks: int[] = story.chunk_numbers;
+} else {
+    run("create-chunks") { story_number: story.number; } -> chunks: int[];
+};
+```
 
 **Truthiness**: `true`, non-empty string, non-zero number, non-empty array/object are truthy. `false`, `null`, `""`, `0`, `[]`, `{}` are falsy.
 
 ---
 
-### loop
+### for
 
-Iterate over collections.
+Iterate over collections. Blocks are expressions — `for` returns an array.
 
-```yaml
-- loop:
-    items: "${file_list}"
-    item_var: file
-    max: 50
-    operation:
-      - fs:
-          operation: exists
-          path: "${file}"
-        output: file_exists
-  output: loop_results
 ```
-
-**Parameters**:
-- `items` (required): Variable containing list to iterate
-- `item_var`: Name of current item variable (default: `item`)
-- `operation` (required): Steps to execute per iteration
-- `max`: Safety limit on iterations
-- `while`: Optional condition to continue (for while-loop behavior)
+set results: map[] = for chunk_number in story.chunk_numbers {
+    run("implement-chunk") { chunk_number: chunk_number; } -> result: map;
+    result
+};
+```
 
 ---
 
 ### aggregate
 
-Combine multiple results into a summary.
+Combine multiple results.
 
-```yaml
-- aggregate:
-    results:
-      - ${review_1}
-      - ${review_2}
-      - ${review_3}
-    strategy: consensus_summary
-  output: final_review
+```
+aggregate(results: [known_fields, llm_fields], strategy: merge) -> story: map;
 ```
 
-**Parameters**:
-- `results` (required): List of variables to aggregate
-- `strategy` (required): Aggregation strategy string
+**Strategies**: `merge` (shallow object merge), `consensus_summary`, custom
 
 ---
 
@@ -588,23 +392,15 @@ Combine multiple results into a summary.
 
 ### set
 
-Bind arbitrary values into the scroll context for use in later steps.
+Bind values into the scroll context.
 
-```yaml
-- set:
-    values:
-      project_name: "sage-polaris"
-      max_retries: 3
-      config:
-        timeout: 30
-        verbose: true
-  output: settings
 ```
-
-**Parameters**:
-- `values` (required): Arbitrary JSON/YAML values to bind
-
-**Use cases**: Constants, computed defaults, configuration injection
+set count: int = 5;
+set name: str = "sage-polaris";
+set config: map = { timeout: 30, verbose: true };
+set full: map = base + { extra_field: "value" };  // map merge
+set all: str[] = first ++ second;                  // array concat
+```
 
 ---
 
@@ -614,210 +410,79 @@ Bind arbitrary values into the scroll context for use in later steps.
 
 Run security scans on content or files.
 
-```yaml
-- secure:
-    scan_type: secret_detection   # secret_detection | dependency_cve | static_analysis
-    policy: block                 # block | warn | audit
-    input: ${generated_code}      # Optional — content to scan
-  output: scan_report
+```
+secure(scan_type: "secret_detection") {
+    policy: "block",
+    input: generated_code,
+} -> scan: map;
 ```
 
-**Parameters**:
-- `scan_type` (required): `secret_detection`, `dependency_cve`, `static_analysis`
-- `policy`: Action on findings — `block` (halt), `warn` (log and continue), `audit` (record only)
-- `input`: Optional content to scan
+**Scan types**: `secret_detection`, `dependency_cve`, `static_analysis`
+**Policies**: `block` (halt), `warn` (log and continue), `audit` (record only)
 
 ---
 
 ## Error Handling
 
-All primitives support `on_fail`:
+All statements support error handling chains with `|`:
 
-```yaml
-# Halt on failure (default)
-- elaborate:
-    input: ${data}
-  on_fail: halt
-
-# Continue past failure
-- validate:
-    input: ${data}
-    criteria: [...]
-  on_fail: continue
-
-# Retry with limit
-- convert:
-    input: ${data}
-    to: json
-  on_fail:
-    retry:
-      max: 3
-
-# Fallback to alternative steps
-- invoke:
-    agent: primary
-    prompt: "..."
-  on_fail:
-    fallback:
-      - invoke:
-          agent: backup
-          prompt: "..."
 ```
+// Halt on failure (default)
+platform.get_issue(number: n) -> issue: map;
+
+// Continue past failure (null on error)
+test.run() -> results: map | continue;
+
+// Retry then halt
+invoke(agent: "dev", instructions: "...") {} -> impl: map | retry(3);
+
+// Retry then fallback
+invoke(agent: "primary", instructions: "...") {} -> result: map
+    | retry(3)
+    | fallback {
+        invoke(agent: "backup", instructions: "...") {} -> result: map;
+    };
+```
+
+Chains read left-to-right. Last handler is terminal.
 
 ---
 
-## Variable Interpolation
+## String Interpolation
 
-Steps reference previous outputs and input variables with `${name}`:
+Strings use `{expr}` for interpolation. Raw strings use backticks.
 
-```yaml
-requires:
-  input_path:
-    type: string
-    default: "data.yaml"
-
-steps:
-  - fs:
-      operation: read
-      path: ${input_path}          # References input variable
-    output: raw_data
-
-  - convert:
-      input: ${raw_data}           # References previous step output
-      from: yaml
-      to: json
-    output: parsed
-
-  - elaborate:
-      input: ${parsed}             # Chain outputs through steps
-      depth: thorough
-    output: result
+```
+set msg: str = "Issue {issue_number}: {raw_issue.title}";
+set raw: str = `No {interpolation} here`;
 ```
 
-**Embedded interpolation**: `${var}` references work inside strings, including `input`, `context` sub-fields, `path`, `prompt`, and all platform operation string parameters (`body`, `title`, `description`, `labels`, etc.):
-
-```yaml
-- elaborate:
-    input: ${concept_data}
-    context:
-      task: "Generate a problem for topic ${topic_id}, concept ${concept_id}"
-    output: problem
-
-- fs:
-    operation: write
-    path: "output/problem-${attempt}.json"
-    content: ${problem}
-```
-
-**Path access**: Use dot notation to access nested fields: `${validation_result.score}`, `${problem.solution.code}`.
+Single-pass resolution. Undefined variables are compile errors.
 
 ---
 
 ## LLM Backends
 
-The `invoke` primitive (and core primitives that call the LLM internally) supports multiple backends:
-
 | Backend | Use | Configuration |
 |---------|-----|---------------|
-| `ClaudeCliBackend` | Production — shells out to `claude -p` | Default |
-| `OllamaBackend` | Local LLMs via Ollama API | Configure endpoint |
-| `MockLlmBackend` | Testing with canned responses | Provide response map |
+| `ClaudeCliBackend` | Production — `claude -p` | Default |
+| `OllamaBackend` | Local LLMs via Ollama API | `SAGE_LLM_BACKEND=ollama` |
+| `MockLlmBackend` | Testing with canned responses | Test-only |
 
-All core primitives (elaborate, distill, split, merge, convert, validate) and invoke support per-step backend override:
+Per-step override via `tier` (portable) or `model` (explicit):
 
-```yaml
-# Use cheap model for routine work
-- elaborate:
-    input: ${data}
-    depth: balanced
-    backend: ollama
-  output: draft
+```
+// Cheap model for routine work
+elaborate(input: data, depth: balanced) { tier: cheap; } -> draft: str;
 
-# Use expensive model for critical work
-- elaborate:
-    input: ${draft}
-    depth: thorough
-    backend: claude
-  output: refined
+// Premium for critical work
+invoke(agent: "dev", instructions: "...") { tier: premium; } -> impl: map;
 ```
 
-If `backend` is not set, the step uses the default (SAGE_LLM_BACKEND env var or claude).
-
-### Model Selection
-
-All LLM-invoking primitives support per-step model selection:
-
-```yaml
-# Use cheap model for validation
-- validate:
-    input: ${problem}
-    criteria: [...]
-    model_tier: cheap          # cheap | standard | premium
-  output: result
-
-# Pin to specific model for benchmarking
-- elaborate:
-    input: ${topic}
-    depth: detailed
-    model: gpt-oss:20b         # Explicit model name (escape hatch)
-  output: expanded
-
-# Parameterized model via variable
-- elaborate:
-    input: ${topic}
-    model: "${target_model}"   # Supports ${var} interpolation
-  output: result
-```
-
-**Priority chain**: `model` > `model_tier` > env var default.
-
-- `model_tier`: Routes to the tier's configured model (`cheap` → phi4-mini, `standard` → qwen3-coder:30b, `premium` → deepseek-r1:32b for Ollama). Portable across deployments.
-- `model`: Explicit model name. Not portable — use for benchmarking, A/B testing, or pinning a known-good model to a critical step.
-
-### Structured Output (format_schema)
-
-All LLM-invoking primitives support JSON schema enforcement for structured output:
-
-```yaml
-# Enforce specific JSON structure on elaborate output
-- elaborate:
-    input: ${topic}
-    depth: detailed
-    format_schema:
-      type: object
-      properties:
-        statement: { type: string }
-        solution: { type: string }
-        hints: { type: array, items: { type: string } }
-      required: [statement, solution]
-  output: problem
-
-# Override auto-gen schema on validate
-- validate:
-    input: ${code}
-    criteria: [...]
-    format_schema:
-      type: object
-      properties:
-        result: { type: string, enum: [pass, fail] }
-        custom_metric: { type: number }
-      required: [result, custom_metric]
-  output: result
-```
-
-**Schema priority**: scroll `format_schema` > auto-generated > none.
-
-**Auto-generated schemas** (applied when no scroll-level `format_schema` is set):
-- **validate**: `{result: "pass"|"fail", score: number, criteria_results: [...], summary: string}` with `additionalProperties: true`
-- **split**: `[{id: string, content: string, label?: string}]` with `additionalProperties: true`
-
-**No auto-gen** (schema only applied if scroll specifies `format_schema`):
-- elaborate, distill, merge, convert, invoke
-
-**Backend support**:
-- **Ollama**: Full enforcement via grammar-based token masking — model physically cannot emit tokens outside schema
-- **Claude CLI**: Schema is ignored (no CLI flag for structured output) — falls back to prompt + post-hoc parsing
-- **Future OpenAI-compatible backends**: Will support `response_format` parameter
+**Tier mapping** (configurable in config.yaml):
+- `cheap`: haiku (Claude) / phi4-mini (Ollama)
+- `standard`: sonnet (Claude) / qwen2.5-coder:32b (Ollama)
+- `premium`: opus (Claude) / deepseek-r1:32b (Ollama)
 
 ---
 
@@ -827,10 +492,9 @@ All primitives are implemented in `src/`:
 
 - **Core**: `scroll/step_dispatch.rs` (elaborate, distill, split, merge, validate, convert)
 - **Prompts**: `scroll/extraction.rs` (prompt building for each core primitive)
+- **Assembly**: `scroll/assembly/` (parser, type checker, dispatcher)
 - **System**: `primitives/fs`, `primitives/vcs`, `primitives/test`, `primitives/platform`
-- **Agent**: `primitives/invoke` (ClaudeCliBackend, OllamaBackend, MockLlmBackend)
+- **Agent**: `primitives/invoke` (ClaudeCliBackend, OllamaBackend)
 - **Consensus**: `scroll/consensus.rs`
-- **Flow**: `scroll/step_dispatch.rs` (branch, loop, aggregate)
-- **Data**: `scroll/step_dispatch.rs` (set)
 - **Security**: `primitives/secure`
 - **Schema**: `scroll/schema.rs` (all type definitions)

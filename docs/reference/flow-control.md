@@ -1,392 +1,124 @@
 # Flow Control Reference
 
-> **Note**: This document shows YAML syntax from v0.x. As of v1.0-beta, scrolls use
-> **Scroll Assembly** syntax with native control flow: `if`/`else`, `for`, `while`, `match`,
-> `concurrent`. Blocks are expressions — `set x: int = if cond { a } else { b };`.
-> See `tests/scroll_corpus/test_control_flow.scroll` and `test_expressions.scroll` for examples.
-> A full rewrite of this doc is tracked in #179.
+Flow control in Scroll Assembly uses native language constructs — `if`/`else`, `for`, `while`, `match`. Blocks are expressions: they return values.
 
-Flow control primitives manage execution paths within scrolls. They enable conditional logic, iteration, and result aggregation.
+## if / else
 
-## Primitives
+```
+if validation.result == "pass" {
+    fs.write(path: "output.json", content: generated);
+} else {
+    set feedback: map = validation;
+};
 
-### branch
-
-Execute steps conditionally based on runtime values.
-
-#### Syntax
-
-```yaml
-- branch:
-    condition: <expression>
-    if_true:
-      - <step>
-    if_false:          # Optional
-      - <step>
-  output: <variable>   # Optional
+// Blocks are expressions — assign the result
+set tier_choice: str = if chunk.complexity == "high" { "premium" } else { "standard" };
 ```
 
-#### Parameters
+### Condition Operators
 
-- `condition`: Expression evaluated at runtime (supports variable interpolation and comparison operators)
-- `if_true`: Steps to execute when condition is truthy
-- `if_false`: Steps to execute when condition is falsy (optional)
+| Operator | Example |
+|----------|---------|
+| `==` | `result == "pass"` |
+| `!=` | `status != "error"` |
+| `>` `<` `>=` `<=` | `score >= 0.8` |
+| `&&` `\|\|` `!` | `has_cargo && !is_ci` |
+| *(bare value)* | `has_cargo` (truthiness) |
 
-#### Condition Operators
-
-| Operator | Type | Example |
-|----------|------|---------|
-| `==` | Equality | `"${result} == pass"` |
-| `!=` | Inequality | `"${status} != error"` |
-| `>=` | Greater or equal (numeric) | `"${score} >= 0.8"` |
-| `<=` | Less or equal (numeric) | `"${score} <= 0.5"` |
-| `>` | Greater than (numeric) | `"${count} > 0"` |
-| `<` | Less than (numeric) | `"${count} < 10"` |
-| *(none)* | Truthiness | `"${has_cargo}"` |
-
-Numeric operators (`>=`, `<=`, `>`, `<`) coerce both sides to `f64`. Strings that parse as numbers are coerced automatically (e.g., `"1.0" >= 0.8` works). Returns `false` if either side is not numeric.
-
-#### Truthiness Rules
-
-When no operator is present, the condition value is evaluated for truthiness:
+### Truthiness
 
 - **Truthy**: `true`, non-empty string, non-zero number, non-empty array/object
-- **Falsy**: `false`, `null`, empty string `""`, `0`, empty array `[]`, empty object `{}`
+- **Falsy**: `false`, `null`, `""`, `0`, `[]`, `{}`
 
-#### Examples
+---
 
-**Score threshold gate**:
+## for
 
-```yaml
-- validate:
-    input: ${generated}
-    criteria:
-      - "Output is valid"
-    mode: strict
-  output: validation_result
+Iterate over collections. `for` returns an array (each iteration contributes one element).
 
-- branch:
-    condition: "${validation_result.score} >= 0.8"
-    if_true:
-      - fs:
-          operation: write
-          path: output.json
-          content: ${generated}
-    if_false:
-      - set:
-          values: ${validation_result}
-        output: feedback
+```
+// Collect results into an array
+set results: map[] = for chunk_number in story.chunk_numbers {
+    run("implement-chunk") { chunk_number: chunk_number; } -> result: map;
+    result   // last expression = return value for this iteration
+};
+
+// Concurrent iteration
+set results: map[] = concurrent for story in epic.stories {
+    run("run-story") { story_number: story.number; } -> result: map;
+    result
+};
 ```
 
-**File existence check**:
+**Variables**: The iteration variable is named in the `for` clause. `loop_index` is available automatically.
 
-```yaml
-- fs:
-    operation: exists
-    path: Cargo.toml
-  output: has_cargo
+---
 
-- branch:
-    condition: "${has_cargo}"
-    if_true:
-      - fs:
-          operation: read
-          path: Cargo.toml
-        output: cargo_contents
-    if_false:
-      - fs:
-          operation: write
-          path: .test-output/no-cargo.txt
-          content: "No Cargo.toml found"
-  output: branch_result
+## while
+
 ```
+set attempts: int = 0;
+while attempts < 3 {
+    invoke(agent: "dev", instructions: "Fix the issues") {
+        context: [code, review.issues],
+    } -> code: map;
 
-**Environment-based execution**:
+    validate(input: code, criteria: ["Tests pass"]) { mode: strict; } -> check: map;
+    if check.result == "pass" { break; };
 
-```yaml
-- platform:
-    operation: env
-    var: CI
-  output: is_ci
-
-- branch:
-    condition: "${is_ci}"
-    if_true:
-      - test:
-          operation: coverage
-          config:
-            min_coverage: 90
-    if_false:
-      - test:
-          operation: run
-```
-
-**Validation gate**:
-
-```yaml
-- validate:
-    input: ${generated_code}
-    criteria:
-      - "Code is syntactically valid"
-      - "All functions have return types"
-    mode: strict
-  output: check
-
-- branch:
-    condition: "${check}"
-    if_true:
-      - vcs:
-          operation: commit
-          message: "validated code"
-    if_false:
-      - elaborate:
-          input: ${check}
-          depth: concise
-          context:
-            task: "Explain what failed validation and suggest fixes"
-        output: fix_suggestions
+    attempts = attempts + 1;
+};
 ```
 
 ---
 
-### loop
+## match
 
-Iterate over collections or repeat operations.
+Multi-branch selection. Returns a value.
 
-#### Syntax
-
-```yaml
-- loop:
-    items: <variable_or_list>
-    item_var: <loop_variable>  # Default: "item"
-    operation:
-      - <step>
-    while: <condition>         # Optional
-    max: <number>              # Safety limit
-  output: <variable>           # Optional
 ```
-
-#### Parameters
-
-- `items`: Variable containing a list/array to iterate over
-- `item_var`: Name of the variable holding the current item (default: `item`)
-- `operation`: Steps to execute for each iteration
-- `while`: Optional condition to continue looping
-- `max`: Maximum iterations (safety limit — always set this)
-
-#### Examples
-
-**Iterate over files**:
-
-```yaml
-- fs:
-    operation: list
-    path: .test-output/flow-loop
-  output: test_files
-
-- loop:
-    items: "${test_files}"
-    item_var: file
-    max: 50
-    operation:
-      - fs:
-          operation: exists
-          path: "${file}"
-        output: file_exists
-  output: loop_results
-```
-
-**Process a work list**:
-
-```yaml
-- split:
-    input: ${epic}
-    by: semantic
-    granularity: coarse
-  output: story_list
-
-- loop:
-    items: ${story_list}
-    item_var: story
-    max: 20
-    operation:
-      - elaborate:
-          input: ${story}
-          depth: thorough
-          context:
-            task: "Generate implementation plan"
-        output: plan
-      - validate:
-          input: ${plan}
-          criteria:
-            - "Plan has clear acceptance criteria"
-          mode: strict
-        output: plan_check
-```
-
-**Batch file processing**:
-
-```yaml
-- fs:
-    operation: list
-    path: ./pending_reviews
-  output: review_files
-
-- loop:
-    items: ${review_files}
-    item_var: file
-    max: 100
-    operation:
-      - fs:
-          operation: read
-          path: ${file}
-        output: content
-      - elaborate:
-          input: ${content}
-          depth: balanced
-          context:
-            task: "Review this code for quality issues"
-        output: review
-      - fs:
-          operation: write
-          path: "./reviews/${file}.review"
-          content: ${review}
+set tier_choice: str = match chunk.complexity {
+    "low" => "cheap",
+    "medium" => "standard",
+    "high" => "premium",
+};
 ```
 
 ---
 
-### aggregate
+## aggregate
 
-Combine multiple results into a unified output.
+Combine multiple results into a single output.
 
-#### Syntax
-
-```yaml
-- aggregate:
-    results:
-      - ${variable1}
-      - ${variable2}
-    strategy: <aggregation_strategy>
-  output: <variable>
+```
+aggregate(results: [known_fields, llm_fields], strategy: merge) -> story: map;
+aggregate(results: reviews, strategy: consensus_summary) -> final: map;
 ```
 
-#### Parameters
-
-- `results`: List of variables to aggregate
-- `strategy`: How to combine results (e.g., `consensus_summary`, `merge`)
-
-#### Examples
-
-**Multi-agent synthesis**:
-
-```yaml
-- parallel:
-    agents:
-      - reviewer_1
-      - reviewer_2
-      - reviewer_3
-    prompt: "Review ${pull_request}"
-  output: reviews
-
-- aggregate:
-    results: ${reviews}
-    strategy: consensus_summary
-  output: final_review
-```
-
-**Combining test results**:
-
-```yaml
-- concurrent:
-    operations:
-      - test:
-          operation: run
-          pattern: "unit/*"
-      - test:
-          operation: run
-          pattern: "integration/*"
-  output: all_tests
-
-- aggregate:
-    results: ${all_tests}
-    strategy: merge
-  output: overall_result
-```
+**Strategies**: `merge` (shallow object merge, right wins), `consensus_summary`
 
 ---
 
-## Best Practices
+## Error Handling Chains
 
-### 1. Always Set Maximum Iterations
+All statements support error handling with `|`:
 
-Prevent runaway loops:
+```
+// Continue past failure (null on error)
+test.run() -> results: map | continue;
 
-```yaml
-# Good — bounded
-- loop:
-    items: ${items}
-    operation: [...]
-    max: 100
+// Retry then halt
+invoke(agent: "dev", instructions: "...") {} -> impl: map | retry(3);
 
-# Dangerous — could loop forever
-- loop:
-    items: ${items}
-    operation: [...]
+// Retry then fallback
+invoke(agent: "primary", instructions: "...") {} -> result: map
+    | retry(3)
+    | fallback {
+        invoke(agent: "backup", instructions: "...") {} -> result: map;
+    };
 ```
 
-### 2. Use Meaningful Variable Names
-
-```yaml
-# Clear
-- loop:
-    items: ${stories}
-    item_var: story
-
-# Ambiguous
-- loop:
-    items: ${stories}
-    item_var: item
-```
-
-### 3. Use the Right Condition Style
-
-Use truthiness for simple pass/fail, operators for thresholds:
-
-```yaml
-# Truthiness — good for validate pass/fail
-- branch:
-    condition: "${is_ready}"
-    if_true: [...]
-
-# String equality — good for status checks
-- branch:
-    condition: "${validation_result.result} == pass"
-    if_true: [...]
-
-# Numeric threshold — good for scores
-- branch:
-    condition: "${validation_result.score} >= 0.8"
-    if_true: [...]
-```
-
-### 4. Handle Both Branches
-
-Always provide `if_false` for important decisions:
-
-```yaml
-- branch:
-    condition: "${scan.clean}"
-    if_true:
-      - vcs:
-          operation: commit
-    if_false:
-      - elaborate:
-          input: ${scan}
-          depth: concise
-          context:
-            task: "Summarize security findings"
-        output: alert
-```
+Chains read left-to-right. Last handler is terminal.
 
 ---
 
@@ -394,72 +126,44 @@ Always provide `if_false` for important decisions:
 
 ### Validation Gate
 
-```yaml
-- validate:
-    input: ${output}
-    criteria: [...]
-    mode: strict
-  output: check
+```
+validate(input: output, criteria: [...]) { mode: strict; } -> check: map;
 
-- branch:
-    condition: "${check}"
-    if_true:
-      # proceed
-    if_false:
-      # diagnose and halt
-      on_fail: halt
+if check.result == "pass" {
+    vcs.commit(message: "validated");
+} else {
+    // halt or remediate
+};
 ```
 
 ### Process-and-Collect
 
-```yaml
-- loop:
-    items: ${work_list}
-    item_var: item
-    max: 50
-    operation:
-      - elaborate:
-          input: ${item}
-          depth: thorough
-        output: result
-  output: all_results
-
-- merge:
-    inputs: ${all_results}
-    strategy: sequential
-  output: combined
+```
+set processed: map[] = for item in work_list {
+    elaborate(input: item, depth: thorough) -> expanded: map;
+    expanded
+};
 ```
 
-### Parallel Processing with Aggregation
+### Conditional LLM Tier
 
-```yaml
-- parallel:
-    agents: [agent_1, agent_2, agent_3]
-    prompt: "Analyze ${data}"
-  output: analyses
+```
+set tier: str = match chunk.complexity {
+    "low" => "cheap",
+    "medium" => "standard",
+    "high" => "premium",
+};
 
-- aggregate:
-    results: ${analyses}
-    strategy: consensus_summary
-  output: final_analysis
+invoke(agent: "dev", instructions: "Implement") {
+    tier: tier,
+} -> impl: map;
 ```
 
 ---
 
-## Integration with Other Primitives
-
-Flow control composes with everything:
-
-- **Core primitives**: Loop over split results, branch on validate outcomes, aggregate merged outputs
-- **System primitives**: Conditional file operations, environment-based VCS actions
-- **Agent operations**: Iterative generation, conditional invocation
-- **Security**: Scan → branch on findings → remediate or block
-
 ## Implementation
 
-Flow control is implemented in:
-
-- Schema: `src/scroll/schema.rs`
-- Execution: `src/scroll/step_dispatch.rs`
-
-See [primitives.md](./primitives.md) for the complete primitive reference.
+- Parser: `src/scroll/assembly/parser.rs` (if, for, while, match as grammar rules)
+- Type checker: `src/scroll/assembly/type_checker.rs`
+- Dispatcher: `src/scroll/assembly/dispatch.rs` (runtime execution)
+- Grammar: `src/scroll/assembly/scroll_assembly.pest`
