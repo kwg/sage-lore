@@ -6,7 +6,7 @@ sage-lore takes deterministic work away from LLMs. The engine manages context an
 
 ## Status
 
-**v1.0.0-beta.1** - Core engine complete with 20 primitives, Scroll Assembly language, LSP, security ratchet, three-tier config hierarchy.
+**v1.0.0-beta.1.1** - Core engine complete with 20 primitives, Scroll Assembly language, LSP, security ratchet, three-tier config hierarchy.
 
 ## Execution Model
 
