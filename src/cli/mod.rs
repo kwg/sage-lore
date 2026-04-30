@@ -7,8 +7,8 @@ pub mod run;
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "sage")]
-#[command(about = "SAGE Method - Security-Aware Generation Engine")]
+#[command(name = "sage-lore")]
+#[command(about = "sage-lore — LLM ORchestration Engine for the Stateless Agent Guidance Engine (SAGE) method")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,

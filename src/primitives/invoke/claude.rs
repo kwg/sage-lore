@@ -311,6 +311,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
 
         let model = backend.select_model(request.model_tier.as_ref());
@@ -386,6 +387,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
 
         let response = backend.generate(request).await;
@@ -409,6 +411,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
 
         let result = backend.generate(request).await;
@@ -438,6 +441,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
 
         let start = std::time::Instant::now();
@@ -469,6 +473,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
 
         let start = std::time::Instant::now();

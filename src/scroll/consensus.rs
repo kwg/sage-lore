@@ -263,6 +263,7 @@ async fn check_invariant_async(
         model_tier: Some(crate::primitives::invoke::ModelTier::Cheap),
         format_schema: None,
         model: None,
+        thinking: None,
     };
 
     let response = backend.generate(request).await

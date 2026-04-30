@@ -21,6 +21,7 @@ async fn test_claude_cheap_tier_selects_haiku() {
         model_tier: Some(ModelTier::Cheap),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     // We can't actually execute without the CLI, but we can verify model selection
@@ -43,6 +44,7 @@ async fn test_claude_standard_tier_selects_sonnet() {
         model_tier: Some(ModelTier::Standard),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let debug_output = format!("{:?}", backend);
@@ -63,6 +65,7 @@ async fn test_claude_premium_tier_selects_opus() {
         model_tier: Some(ModelTier::Premium),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let debug_output = format!("{:?}", backend);
@@ -83,6 +86,7 @@ async fn test_ollama_cheap_tier_selects_small_model() {
         model_tier: Some(ModelTier::Cheap),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let debug_output = format!("{:?}", backend);
@@ -103,6 +107,7 @@ async fn test_ollama_standard_tier_selects_medium_model() {
         model_tier: Some(ModelTier::Standard),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let debug_output = format!("{:?}", backend);
@@ -123,6 +128,7 @@ async fn test_ollama_premium_tier_selects_large_model() {
         model_tier: Some(ModelTier::Premium),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let debug_output = format!("{:?}", backend);
@@ -172,6 +178,7 @@ async fn test_llm_request_with_tier_roundtrip() {
         model_tier: Some(ModelTier::Cheap),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     // This tests that the struct is compatible with serialization
@@ -195,6 +202,7 @@ async fn test_tier_abstraction_no_hardcoded_models() {
         model_tier: Some(ModelTier::Cheap),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let standard_request = LlmRequest {
@@ -206,6 +214,7 @@ async fn test_tier_abstraction_no_hardcoded_models() {
         model_tier: Some(ModelTier::Standard),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let premium_request = LlmRequest {
@@ -217,6 +226,7 @@ async fn test_tier_abstraction_no_hardcoded_models() {
         model_tier: Some(ModelTier::Premium),
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     // Verify that all tiers are distinct

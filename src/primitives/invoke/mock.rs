@@ -429,13 +429,7 @@ mod tests {
 
         let req = LlmRequest {
             prompt: "test prompt".to_string(),
-            system: None,
-            max_tokens: None,
-            temperature: None,
-            timeout_secs: None,
-            model_tier: None,
-            format_schema: None,
-            model: None,
+            ..Default::default()
         };
 
         let resp = mock.generate(req).await.unwrap();

@@ -1,0 +1,11 @@
+scroll "test-index-access" {
+    description: "Index access into arrays, including lines[n-1]";
+
+    require lines: str[];
+    require n: int;
+    provide last_line: str;
+    provide first_line: str;
+
+    first_line = lines[0];
+    last_line = lines[n - 1];
+}

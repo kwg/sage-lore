@@ -6,7 +6,7 @@ sage-lore takes deterministic work away from LLMs. The engine manages context an
 
 ## Status
 
-**v1.0.0-beta.1.1** - Core engine complete with 20 primitives, Scroll Assembly language, LSP, security ratchet, three-tier config hierarchy.
+**v1.0.0-beta.1.2** - Core engine complete with 21 primitives, Scroll Assembly language, LSP, security ratchet, three-tier config hierarchy.
 
 ## Execution Model
 
@@ -47,7 +47,7 @@ sage-lore run scroll.scroll --var issue_number=42 --output result -v
 
 ## Primitives
 
-sage-lore provides 20 orthogonal primitives for deterministic LLM orchestration:
+sage-lore provides 21 orthogonal primitives for deterministic LLM orchestration:
 
 ### Core Primitives (6)
 
@@ -93,6 +93,12 @@ Control execution flow and data wiring within scrolls.
 Security scanning and validation.
 
 20. **secure** - Run security scans (secret_detection, dependency_cve, static_analysis)
+
+### Pure Builtins (1)
+
+Deterministic, side-effect-free functions. No backend, no LLM, no I/O.
+
+21. **string** - Deterministic string operations (`line`, `split`, `join`, `lines`, `trim`, `lower`, `upper`, `contains`, `replace`). Plus array index access `arr[i]` for working with split results.
 
 See `docs/reference/primitives.md` for detailed documentation and examples.
 
@@ -274,7 +280,7 @@ Secrets are resolved from: Environment → `.env` → `~/.config/sage-lore/secre
 
 - **Linux**: Supported
 - **macOS**: Supported
-- **Windows**: Not supported in v0.1.0
+- **Windows**: Not supported in v1.0. WSL2 is recommended for Windows users.
 
 ## Known Limitations (v1.0)
 

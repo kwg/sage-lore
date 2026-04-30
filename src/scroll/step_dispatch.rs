@@ -1396,82 +1396,151 @@ impl super::executor::Executor {
     /// Invokes an agent with a prompt and optional context.
     /// File operations, git operations, etc. should use dedicated primitives (fs, vcs, test, etc.).
     pub async fn execute_invoke(&mut self, step: &InvokeStep) -> Result<(), ExecutionError> {
-        let result = with_on_fail!(self, &step.on_fail, {
-            let agent = &step.invoke.agent;
-            let timeout = step.invoke.timeout_secs;
-            tracing::info!(agent = %agent, timeout_secs = ?timeout, "Invoking agent");
+        // When output_schema is set, retry up to 3 attempts on extraction failure.
+        // Stochastic field-loss and markdown-fenced output are recoverable; a single
+        // failure should not fail the scroll. On retry, the validation error is
+        // appended to the instructions so the model can see what was wrong (#192).
+        const MAX_INVOKE_RETRIES: usize = 3;
+        let has_schema = step.invoke.output_schema.is_some();
+        let max_attempts = if has_schema { MAX_INVOKE_RETRIES } else { 1 };
 
-            // Resolve variable references in the instructions template
-            let resolved_instructions = self.interpolate_string(&step.invoke.instructions)?;
-            tracing::debug!(agent = %agent, instructions_len = resolved_instructions.len(), "Instructions resolved");
+        let agent = &step.invoke.agent;
+        let timeout = step.invoke.timeout_secs;
+        let base_instructions = self.interpolate_string(&step.invoke.instructions)?;
 
-            // Resolve context variables
-            let context_values: Vec<serde_json::Value> = step
-                .invoke
-                .context
-                .as_ref()
-                .map(|ctx_refs| {
-                    ctx_refs
-                        .iter()
-                        .filter_map(|var_ref| self.context.resolve(var_ref).ok())
-                        .collect()
-                })
-                .unwrap_or_default();
+        let context_values: Vec<serde_json::Value> = step
+            .invoke
+            .context
+            .as_ref()
+            .map(|ctx_refs| {
+                ctx_refs
+                    .iter()
+                    .filter_map(|var_ref| self.context.resolve(var_ref).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
 
-            let resolved_backend = step.invoke.backend.as_ref()
-                .map(|v| self.resolve_string_param(v)).transpose()?;
+        let resolved_backend = step.invoke.backend.as_ref()
+            .map(|v| self.resolve_string_param(v)).transpose()?;
+        let system_prompt = self.interface_registry.get_agent_system_prompt(agent)?;
 
-            // Look up agent system prompt from registry
-            let system_prompt = self.interface_registry.get_agent_system_prompt(agent)?;
+        let mut last_error: Option<ExecutionError> = None;
+        let mut validation_errors: Vec<String> = Vec::new();
+        let mut final_result: Option<serde_json::Value> = None;
 
-            let invoke_start = std::time::Instant::now();
-            let result = self.interface_registry.invoke_agent(
-                agent,
-                &system_prompt,
-                &resolved_instructions,
-                &context_values,
-                step.invoke.timeout_secs,
-                resolved_backend.as_deref(),
-                step.invoke.output_schema.as_ref(),
-            ).await?;
-            let invoke_elapsed = invoke_start.elapsed();
-
-            // Track token usage
-            let response = result.as_str().unwrap_or("");
-            let instruction_tokens = resolved_instructions.len() / 4;
-            let response_tokens = response.len() / 4;
+        for attempt in 0..max_attempts {
             tracing::info!(
                 agent = %agent,
-                instruction_tokens = instruction_tokens,
-                response_tokens = response_tokens,
-                response_len = response.len(),
-                elapsed = crate::scroll::executor::format_duration(invoke_elapsed).as_str(),
-                "Agent responded"
+                timeout_secs = ?timeout,
+                attempt = attempt + 1,
+                max_attempts = max_attempts,
+                "Invoking agent"
             );
-            tracing::debug!(agent = %agent, response_preview = %response.chars().take(300).collect::<String>(), "Response preview");
-            self.track_tokens(&resolved_instructions, response);
 
-            Ok(result)
-        })?;
+            // On retry, append the prior validation errors so the model sees what failed.
+            let instructions = if attempt > 0 && !validation_errors.is_empty() {
+                let mut s = base_instructions.clone();
+                s.push_str("\n\n## VALIDATION FAILURES FROM PRIOR ATTEMPTS (MUST FIX)\n");
+                for (i, err) in validation_errors.iter().enumerate() {
+                    s.push_str(&format!("Attempt {}: {}\n", i + 1, err));
+                }
+                s.push_str("\nYou MUST emit a complete object that satisfies the schema. \
+                            Do NOT omit required fields. Do NOT wrap output in markdown fences. \
+                            Output ONLY the JSON object.\n");
+                s
+            } else {
+                base_instructions.clone()
+            };
 
-        // If output_schema is present, extract structured data from raw response
-        let result = if let Some(schema) = &step.invoke.output_schema {
-            let raw_text = result.as_str().unwrap_or("");
+            let raw_result = with_on_fail!(self, &step.on_fail, {
+                let invoke_start = std::time::Instant::now();
+                let result = self.interface_registry.invoke_agent(
+                    agent,
+                    &system_prompt,
+                    &instructions,
+                    &context_values,
+                    step.invoke.timeout_secs,
+                    resolved_backend.as_deref(),
+                    step.invoke.output_schema.as_ref(),
+                    step.invoke.thinking,
+                ).await?;
+                let invoke_elapsed = invoke_start.elapsed();
+
+                let response = result.as_str().unwrap_or("");
+                let instruction_tokens = instructions.len() / 4;
+                let response_tokens = response.len() / 4;
+                tracing::info!(
+                    agent = %agent,
+                    instruction_tokens = instruction_tokens,
+                    response_tokens = response_tokens,
+                    response_len = response.len(),
+                    elapsed = crate::scroll::executor::format_duration(invoke_elapsed).as_str(),
+                    "Agent responded"
+                );
+                tracing::debug!(
+                    agent = %agent,
+                    response_preview = %response.chars().take(300).collect::<String>(),
+                    "Response preview"
+                );
+                self.track_tokens(&instructions, response);
+
+                Ok(result)
+            })?;
+
+            // No schema → done after one attempt.
+            let Some(schema) = &step.invoke.output_schema else {
+                final_result = Some(raw_result);
+                break;
+            };
+
+            let raw_text = raw_result.as_str().unwrap_or("");
             match extract_structured_output(raw_text, schema) {
                 Ok(structured) => {
-                    tracing::info!("output_schema: structured extraction succeeded (local parse)");
-                    structured
+                    if attempt > 0 {
+                        tracing::info!(
+                            agent = %agent,
+                            attempt = attempt + 1,
+                            "output_schema: structured extraction succeeded after retry"
+                        );
+                    } else {
+                        tracing::info!("output_schema: structured extraction succeeded (local parse)");
+                    }
+                    final_result = Some(structured);
+                    break;
                 }
                 Err(e) => {
-                    tracing::warn!("output_schema: extraction failed: {}", e);
+                    let err_str = e.to_string();
+                    if attempt < max_attempts - 1 {
+                        tracing::warn!(
+                            agent = %agent,
+                            attempt = attempt + 1,
+                            max_attempts = max_attempts,
+                            error = %err_str,
+                            "Schema validation failed, retrying"
+                        );
+                        validation_errors.push(err_str);
+                        last_error = Some(e);
+                        continue;
+                    }
+                    tracing::warn!(
+                        agent = %agent,
+                        attempts = max_attempts,
+                        error = %err_str,
+                        "output_schema: extraction failed after all retries"
+                    );
                     return Err(e);
                 }
             }
-        } else {
-            result
-        };
+        }
 
-        // Bind output if specified
+        let result = final_result.ok_or_else(|| {
+            last_error.unwrap_or_else(|| {
+                ExecutionError::InvocationError(
+                    format!("invoke failed after {} attempts (no result)", max_attempts)
+                )
+            })
+        })?;
+
         if let Some(output_name) = &step.output {
             tracing::debug!(output = %output_name, "Output bound");
             self.context.set_variable(output_name.clone(), result);
@@ -1550,7 +1619,7 @@ impl super::executor::Executor {
                 let _permit = semaphore.acquire().await.unwrap();
 
                 let result = interface_registry.invoke_agent(
-                    &agent_name, &system_prompt, &prompt_str, &[], None, None, None
+                    &agent_name, &system_prompt, &prompt_str, &[], None, None, None, None
                 ).await;
 
                 (index, agent_name, result)
@@ -1760,6 +1829,7 @@ impl super::executor::Executor {
                     model_tier: None, // use default model — consensus needs reasoning capability
                     format_schema: Some(vote_schema),
                     model: None,
+                    thinking: None,
                 };
                 let backend = interface_registry.invoke.backend();
                 let result = rt_handle.block_on(backend.generate(request))

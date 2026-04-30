@@ -21,7 +21,7 @@ pub enum ModelTier {
 }
 
 /// Request to generate text from an LLM.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LlmRequest {
     /// The prompt to send to the model.
     pub prompt: String,
@@ -42,6 +42,18 @@ pub struct LlmRequest {
     /// Explicit model name override. Takes priority over model_tier and defaults.
     /// Supports any model name the backend recognizes (e.g., "gpt-oss:20b", "phi4-mini").
     pub model: Option<String>,
+    /// Request thinking-mode reasoning from the backend.
+    ///
+    /// When `Some(true)`:
+    /// - Ollama backend omits the `format` field (free-form reasoning output).
+    /// - `num_predict` floor raised to 32768 (reasoning traces are long).
+    /// - Per-call timeout floor raised to 1200s.
+    ///
+    /// When the caller also supplies a schema for structured output, the
+    /// invoke interface orchestrates a two-call pattern (think → cheap-extract)
+    /// rather than relying on the reasoning model to produce schema-conforming JSON.
+    /// See `crate::scroll::interfaces::InterfaceRegistry::invoke_agent`.
+    pub thinking: Option<bool>,
 }
 
 /// Response from an LLM generation request.
@@ -90,13 +102,7 @@ mod tests {
     fn test_llm_request_default_like() {
         let req = LlmRequest {
             prompt: "test".to_string(),
-            system: None,
-            max_tokens: None,
-            temperature: None,
-            timeout_secs: None,
-            model_tier: None,
-            format_schema: None,
-            model: None,
+            ..Default::default()
         };
         assert_eq!(req.prompt, "test");
     }
@@ -143,13 +149,8 @@ mod tests {
     fn test_llm_request_with_tier() {
         let req = LlmRequest {
             prompt: "test".to_string(),
-            system: None,
-            max_tokens: None,
-            temperature: None,
-            timeout_secs: None,
             model_tier: Some(ModelTier::Cheap),
-            format_schema: None,
-            model: None,
+            ..Default::default()
         };
         assert_eq!(req.model_tier, Some(ModelTier::Cheap));
     }

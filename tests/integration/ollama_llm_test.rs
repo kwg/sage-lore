@@ -62,6 +62,7 @@ async fn test_ollama_responds() {
         model_tier: None,
         format_schema: None,
         model: None,
+        thinking: None,
     }).await;
 
     assert!(response.is_ok(), "Ollama should respond: {:?}", response.err());

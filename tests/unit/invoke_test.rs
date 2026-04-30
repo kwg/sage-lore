@@ -19,6 +19,7 @@ fn sample_request() -> LlmRequest {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     }
 }
 
@@ -71,6 +72,7 @@ async fn test_request_minimal() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
     assert_eq!(req.prompt, "Hello");
     assert!(req.system.is_none());
@@ -151,6 +153,7 @@ async fn test_generate_with_default_response() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
 
     let result = mock.generate(req).await.unwrap();
@@ -198,6 +201,7 @@ async fn test_generate_canned_responses_from_file() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
     let result1 = mock.generate(req1).await.unwrap();
     assert_eq!(result1.text, "4");
@@ -211,6 +215,7 @@ async fn test_generate_canned_responses_from_file() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
     let result2 = mock.generate(req2).await.unwrap();
     assert_eq!(result2.text, "Hi there!");
@@ -234,6 +239,7 @@ async fn test_call_recording() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
     mock.generate(req1).await.unwrap();
 
@@ -246,6 +252,7 @@ async fn test_call_recording() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
     mock.generate(req2).await.unwrap();
 
@@ -271,6 +278,7 @@ async fn test_was_called_with_prompt() {
         model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
     };
     mock.generate(req).await.unwrap();
 

@@ -830,6 +830,21 @@ pub struct InvokeParams {
     /// The parsed+validated value is bound to `output:` instead of raw text.
     #[serde(default)]
     pub output_schema: Option<serde_json::Value>,
+    /// Request thinking-mode reasoning from the backend (#188).
+    ///
+    /// When true:
+    /// - The backend omits format constraints so reasoning can flow free-form.
+    /// - num_predict floor is raised to 32768 (reasoning traces are long).
+    /// - Per-call timeout floor is raised to 1200s.
+    /// - If `output_schema` is also set, the engine orchestrates a two-call
+    ///   pattern: thinking model produces free-form text, then a cheap-tier
+    ///   call extracts schema-conforming JSON. Both calls are observable
+    ///   in traces.
+    ///
+    /// Use for reasoning-tier models (qwen3.x, deepseek-thinking, etc.) where
+    /// schema-constrained decoding fights the model's native reasoning channel.
+    #[serde(default)]
+    pub thinking: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

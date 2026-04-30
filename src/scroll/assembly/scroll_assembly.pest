@@ -196,7 +196,7 @@ unary = { "!" ~ unary | postfix }
 
 // Postfix: field access and calls
 postfix    = { primary ~ postfix_op* }
-postfix_op = _{ call_expr | field_access }
+postfix_op = _{ call_expr | field_access | index_access }
 
 call_expr    = { "(" ~ call_args? ~ ")" ~ config_block? }
 call_args    = { call_arg ~ ("," ~ call_arg)* }
@@ -208,6 +208,8 @@ config_fields = { config_field ~ ("," ~ config_field)* ~ ","? }
 config_field  = { ident ~ ":" ~ expression }
 
 field_access = { "." ~ ident }
+
+index_access = { "[" ~ expression ~ "]" }
 
 // ============================================================
 // Primary Expressions

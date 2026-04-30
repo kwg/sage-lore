@@ -226,6 +226,15 @@ async fn dispatch_call(
     let arg_map = build_arg_map(args, &executor.context)?;
     let config_map = build_config_map(config, &executor.context)?;
 
+    // Pure deterministic builtins (string.*) — no I/O, no executor state.
+    if namespace == "string" {
+        let mut params_map = serde_json::Map::new();
+        for (k, v) in &arg_map {
+            params_map.insert(k.clone(), v.clone());
+        }
+        return crate::scroll::builtins::string::dispatch(&method, &params_map);
+    }
+
     // For system primitives (platform, fs, vcs, test), call the interface
     // dispatch directly — avoids the Step schema string/typed value mismatch.
     if matches!(namespace.as_str(), "platform" | "fs" | "vcs" | "test") {
@@ -729,6 +738,46 @@ fn eval_expr(expr: &Expr, ctx: &ExecutionContext) -> Result<Value, ExecutionErro
                 }
                 _ => Ok(Value::Null),
             }
+        }
+
+        ExprKind::IndexAccess { object, index } => {
+            let obj_val = eval_expr(object, ctx)?;
+            let idx_val = eval_expr(index, ctx)?;
+            let arr = match &obj_val {
+                Value::Array(items) => items,
+                Value::String(_) => {
+                    return Err(ExecutionError::TypeError(
+                        "cannot index string with []; use .line or string builtins".into(),
+                    ));
+                }
+                _ => {
+                    return Err(ExecutionError::TypeError(format!(
+                        "cannot index non-array value: {obj_val}"
+                    )));
+                }
+            };
+            let i = match &idx_val {
+                Value::Number(n) => n.as_i64().ok_or_else(|| {
+                    ExecutionError::TypeError("array index must be int, got float".into())
+                })?,
+                _ => {
+                    return Err(ExecutionError::TypeError(format!(
+                        "array index must be int, got {idx_val}"
+                    )));
+                }
+            };
+            if i < 0 {
+                return Err(ExecutionError::TypeError(format!(
+                    "negative array index {i} not supported"
+                )));
+            }
+            let i = i as usize;
+            arr.get(i).cloned().ok_or_else(|| {
+                ExecutionError::InvalidStep(format!(
+                    "index {i} out of bounds for array of length {}",
+                    arr.len()
+                ))
+            })
         }
 
         ExprKind::ArrayLit(elements) => {

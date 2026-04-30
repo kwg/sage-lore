@@ -1,0 +1,10 @@
+scroll "string-primitive-test" {
+    description: "Exercises the string.* builtin namespace.";
+    require code: str;
+    provide first: str;
+    provide parts: str[];
+    provide upper_first: str;
+    first = string.line(input: code, n: 1);
+    parts = string.split(input: code, separator: "\n");
+    upper_first = string.upper(input: first);
+}

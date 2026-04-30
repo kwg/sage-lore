@@ -63,6 +63,84 @@ impl Default for OllamaBackend {
     }
 }
 
+/// Build the ollama `/api/generate` request payload from an LlmRequest.
+///
+/// Returns the payload value alongside the resolved `think` flag (so the
+/// caller can adjust timeout independently — thinking calls need higher floors).
+///
+/// Free function rather than a method so unit tests can construct payloads
+/// without needing an OllamaBackend or HTTP client. The payload-shape rules
+/// (#188 thinking-mode adjustments, #159 model-family format gating, ollama
+/// 0.18.0+ num_ctx clamping) are isolated here.
+fn build_payload(request: &LlmRequest, model: &str) -> (serde_json::Value, bool) {
+    // num_ctx controls KV cache allocation. Ollama 0.18.0+ defaults to the
+    // model's declared context window (e.g. 256K for qwen3.5), which can
+    // exceed available VRAM. Default to 32768 — large enough for most scroll
+    // prompts, small enough to fit in memory. Override via OLLAMA_NUM_CTX.
+    let num_ctx: u64 = std::env::var("OLLAMA_NUM_CTX")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(32768);
+
+    // Per-call thinking flag wins over OLLAMA_THINK env var (#188).
+    let think: bool = request.thinking
+        .or_else(|| {
+            std::env::var("OLLAMA_THINK").ok().and_then(|v| v.parse().ok())
+        })
+        .unwrap_or(false);
+
+    // num_predict policy:
+    // - Thinking-mode floor: 32768 (#188) — reasoning traces need headroom.
+    // - Non-thinking default: 262144 (#192) — Harmony/gpt-oss reason in prose
+    //   before structured output, so an 8192 cap was clipping mid-emission.
+    //   Higher cap doesn't slow short outputs; the model's own termination
+    //   logic decides when to stop.
+    let num_predict = if think {
+        request.max_tokens.map(|m| m.max(32768)).unwrap_or(32768)
+    } else {
+        request.max_tokens.unwrap_or(262144)
+    };
+
+    // Model-family-aware format strategy (#159, #188).
+    let model_lower = model.to_lowercase();
+    let supports_json_format = !think
+        && !model_lower.contains("gpt-oss")
+        && !model_lower.contains("gpt_oss")
+        && !model_lower.contains("harmony");
+
+    let mut payload = serde_json::json!({
+        "model": model,
+        "prompt": request.prompt,
+        "stream": false,
+        "think": think,
+        "options": {
+            "num_predict": num_predict,
+            "num_ctx": num_ctx,
+        }
+    });
+
+    if supports_json_format {
+        let format_value = request.format_schema
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| serde_json::Value::String("json".to_string()));
+        payload["format"] = format_value;
+    } else if think {
+        tracing::info!(model = %model, "Skipping format constraint (thinking mode — free-form reasoning)");
+    } else {
+        tracing::info!(model = %model, "Skipping format constraint (model family does not support GBNF)");
+    }
+
+    if let Some(ref system) = request.system {
+        payload["system"] = serde_json::Value::String(system.clone());
+    }
+    if let Some(temperature) = request.temperature {
+        payload["options"]["temperature"] = serde_json::Value::from(temperature);
+    }
+
+    (payload, think)
+}
+
 impl OllamaBackend {
     /// Create a new Ollama backend with default settings.
     ///
@@ -155,74 +233,15 @@ impl OllamaBackend {
     /// large model for code generation).
     pub async fn generate_with_model(&self, request: LlmRequest, model: &str) -> LlmResult<LlmResponse> {
         let url = format!("{}/api/generate", self.base_url);
+        let (payload, think) = build_payload(&request, model);
 
-        // Build the request payload with specified model
-        // format: "json" constrains ollama to produce syntactically valid JSON,
-        // preventing the malformed YAML/prose that local models often emit.
-        // All sage-lore invoke calls expect structured output, so this is safe globally.
-        // num_ctx controls KV cache allocation. Ollama 0.18.0+ defaults to the model's
-        // declared context window (e.g. 256K for qwen3.5), which can exceed available VRAM.
-        // Default to 32768 — large enough for most scroll prompts, small enough to fit in memory.
-        // Override via OLLAMA_NUM_CTX env var if needed.
-        let num_ctx: u64 = std::env::var("OLLAMA_NUM_CTX")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(32768);
-
-        // Reasoning models (e.g. qwen3.5) put output in `thinking` field and leave
-        // `response` empty when think mode is on. Default to think=false so structured
-        // extraction works reliably. Override with OLLAMA_THINK=true to enable reasoning.
-        let think: bool = std::env::var("OLLAMA_THINK")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(false);
-
-        // Model-family-aware format strategy (#159):
-        // - Models with GBNF grammar support (qwen, phi, llama, deepseek, gemma):
-        //   use schema-based constrained decoding or "json" fallback
-        // - gpt-oss models: Harmony training fights grammar constraints,
-        //   omit format field entirely and rely on prompt + post-processing
-        // - Unknown models: default to "json" (safe default)
-        let model_lower = model.to_lowercase();
-        let supports_json_format = !model_lower.contains("gpt-oss")
-            && !model_lower.contains("gpt_oss")
-            && !model_lower.contains("harmony");
-
-        let mut payload = serde_json::json!({
-            "model": model,
-            "prompt": request.prompt,
-            "stream": false,
-            "think": think,
-            "options": {
-                "num_predict": request.max_tokens.unwrap_or(8192),
-                "num_ctx": num_ctx,
-            }
-        });
-
-        if supports_json_format {
-            // Use schema if provided, otherwise basic "json" constraint
-            let format_value = request.format_schema
-                .as_ref()
-                .cloned()
-                .unwrap_or_else(|| serde_json::Value::String("json".to_string()));
-            payload["format"] = format_value;
-        } else {
-            tracing::info!(model = %model, "Skipping format constraint (model family does not support GBNF)");
-        }
-
-        // Add system prompt if provided
-        if let Some(ref system) = request.system {
-            payload["system"] = serde_json::Value::String(system.clone());
-        }
-
-        // Add temperature if provided
-        if let Some(temperature) = request.temperature {
-            payload["options"]["temperature"] = serde_json::Value::from(temperature);
-        }
-
-        // Determine timeout
+        // Determine timeout. Thinking mode raises the floor to 1200s — reasoning
+        // traces routinely exceed the standard backend default (#188).
         let timeout = if let Some(timeout_secs) = request.timeout_secs {
-            Duration::from_secs(timeout_secs)
+            let secs = if think { timeout_secs.max(1200) } else { timeout_secs };
+            Duration::from_secs(secs)
+        } else if think {
+            Duration::from_secs(self.timeout.as_secs().max(1200))
         } else {
             self.timeout
         };
@@ -263,15 +282,34 @@ impl OllamaBackend {
         // Extract the response text.
         // Reasoning models (qwen3.5, etc.) may put content in `thinking` and leave
         // `response` empty. Fall back to `thinking` when `response` is empty.
-        let text = match response_json["response"].as_str() {
-            Some(s) if !s.is_empty() => s.to_string(),
-            _ => response_json["thinking"]
-                .as_str()
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .ok_or_else(|| LlmError::ParseError(
-                    "Both 'response' and 'thinking' fields are empty".to_string()
-                ))?,
+        //
+        // Warn when ollama signals done_reason: length AND `response` is empty AND
+        // `thinking` has content — that means reasoning ran out of budget before
+        // it could emit a final answer. The fallback below returns the truncated
+        // reasoning trace, but the caller should know why it looks half-formed (#188).
+        let done_reason = response_json["done_reason"].as_str().unwrap_or("");
+        let response_str = response_json["response"].as_str().unwrap_or("");
+        let thinking_str = response_json["thinking"].as_str().unwrap_or("");
+        if done_reason == "length" && response_str.is_empty() && !thinking_str.is_empty() {
+            let num_predict = payload["options"]["num_predict"].as_u64().unwrap_or(0);
+            tracing::warn!(
+                model = %model,
+                num_predict = num_predict,
+                thinking_len = thinking_str.len(),
+                "Ollama hit num_predict ceiling mid-reasoning. Final answer never emitted; \
+                 returning truncated reasoning trace. Increase max_tokens or set thinking: true \
+                 (which raises the num_predict floor to 32768)."
+            );
+        }
+
+        let text = if !response_str.is_empty() {
+            response_str.to_string()
+        } else if !thinking_str.is_empty() {
+            thinking_str.to_string()
+        } else {
+            return Err(LlmError::ParseError(
+                "Both 'response' and 'thinking' fields are empty".to_string()
+            ));
         };
 
         // Extract optional token count
@@ -376,6 +414,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
         let response = backend.generate(request).await.expect("Ollama should respond");
         assert!(!response.text.is_empty());
@@ -394,6 +433,7 @@ mod tests {
             model_tier: None,
             format_schema: None,
             model: None,
+            thinking: None,
         };
         // Use a different model than the default
         let response = backend
@@ -446,5 +486,75 @@ mod tests {
             .with_model("custom-model:latest");
         let model = backend.select_model(Some(&ModelTier::Cheap));
         assert_eq!(model, "phi4-mini");
+    }
+
+    // ---- #188 thinking-mode payload shape tests ----
+
+    /// Non-thinking call must keep historical defaults: format constraint applied,
+    /// num_predict honors the request, think=false on the wire.
+    #[test]
+    fn build_payload_non_thinking_default() {
+        let req = LlmRequest {
+            prompt: "hi".to_string(),
+            max_tokens: Some(2048),
+            ..Default::default()
+        };
+        let (payload, think) = build_payload(&req, "qwen3-coder:30b");
+        assert!(!think);
+        assert_eq!(payload["think"], serde_json::Value::Bool(false));
+        assert_eq!(payload["options"]["num_predict"].as_u64(), Some(2048));
+        assert_eq!(payload["format"], serde_json::Value::String("json".to_string()),
+            "non-thinking, schema-less call falls back to bare \"json\" format");
+    }
+
+    /// Thinking call MUST omit format and raise num_predict floor to 32768.
+    #[test]
+    fn build_payload_thinking_drops_format_and_raises_num_predict() {
+        let req = LlmRequest {
+            prompt: "reason about this".to_string(),
+            thinking: Some(true),
+            // explicit max_tokens of 1024 must NOT clamp below the 32768 floor
+            max_tokens: Some(1024),
+            ..Default::default()
+        };
+        let (payload, think) = build_payload(&req, "qwen3.5:27b");
+        assert!(think);
+        assert_eq!(payload["think"], serde_json::Value::Bool(true));
+        assert!(payload.get("format").is_none(),
+            "thinking-mode call must not constrain output format");
+        assert_eq!(
+            payload["options"]["num_predict"].as_u64(),
+            Some(32768),
+            "thinking-mode raises num_predict floor (request asked for 1024, floor wins)"
+        );
+    }
+
+    /// Even when a format_schema is set on the request, thinking-mode drops it —
+    /// schema enforcement happens in the cheap-tier extraction call orchestrated
+    /// one layer up (InterfaceRegistry::invoke_agent).
+    #[test]
+    fn build_payload_thinking_drops_format_schema() {
+        let req = LlmRequest {
+            prompt: "reason".to_string(),
+            thinking: Some(true),
+            format_schema: Some(serde_json::json!({"type": "object"})),
+            ..Default::default()
+        };
+        let (payload, _) = build_payload(&req, "qwen3.5:27b");
+        assert!(payload.get("format").is_none(),
+            "thinking-mode drops format even when caller supplies a schema");
+    }
+
+    /// Caller-supplied max_tokens above the 32768 floor wins (we don't downsize).
+    #[test]
+    fn build_payload_thinking_respects_higher_caller_limit() {
+        let req = LlmRequest {
+            prompt: "reason".to_string(),
+            thinking: Some(true),
+            max_tokens: Some(65536),
+            ..Default::default()
+        };
+        let (payload, _) = build_payload(&req, "qwen3.5:27b");
+        assert_eq!(payload["options"]["num_predict"].as_u64(), Some(65536));
     }
 }

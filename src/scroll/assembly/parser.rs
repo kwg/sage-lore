@@ -784,6 +784,17 @@ impl ParseCtx {
                         span: span.clone(),
                     };
                 }
+                Rule::index_access => {
+                    let index_pair = postfix_part.into_inner().next().unwrap();
+                    let index_expr = self.parse_expression(index_pair)?;
+                    expr = Expr {
+                        kind: ExprKind::IndexAccess {
+                            object: Box::new(expr),
+                            index: Box::new(index_expr),
+                        },
+                        span: span.clone(),
+                    };
+                }
                 _ => {}
             }
         }

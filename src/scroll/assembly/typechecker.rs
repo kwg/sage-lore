@@ -14,6 +14,21 @@ use super::ast::*;
 use super::parser::{Diagnostic, Severity};
 use std::collections::HashMap;
 
+fn format_type_ref(ty: &TypeRef) -> String {
+    let base = match &ty.base {
+        TypeBase::Primitive(p) => p.to_string(),
+        TypeBase::Named(n) => n.clone(),
+    };
+    let mut s = base;
+    if ty.is_array {
+        s.push_str("[]");
+    }
+    if ty.is_nullable {
+        s.push('?');
+    }
+    s
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -298,6 +313,68 @@ impl CheckCtx {
             ExprKind::FieldAccess { object, .. } => {
                 self.check_expr(object);
             }
+            ExprKind::IndexAccess { object, index } => {
+                self.check_expr(object);
+                self.check_expr(index);
+
+                // Best-effort static checks: only flag when we can resolve the object's
+                // declared type or recognise an inline literal. Anything more complex
+                // is deferred to runtime (matches the rest of this checker's posture).
+                if let ExprKind::Identifier(name) = &object.kind {
+                    if let Some(info) = self.lookup_var(name) {
+                        let ty = info.type_ref.clone();
+                        if !ty.is_array {
+                            let ty_str = format_type_ref(&ty);
+                            self.error(
+                                &expr.span,
+                                format!("cannot index type {ty_str}"),
+                            );
+                        }
+                    }
+                } else if matches!(
+                    &object.kind,
+                    ExprKind::StringLit(_) | ExprKind::RawStringLit(_)
+                ) {
+                    self.error(&expr.span, "cannot index type str");
+                } else if matches!(
+                    &object.kind,
+                    ExprKind::IntLit(_) | ExprKind::FloatLit(_) | ExprKind::BoolLit(_)
+                ) {
+                    self.error(&expr.span, "cannot index non-array literal");
+                } else if matches!(&object.kind, ExprKind::MapLit(_)) {
+                    self.error(&expr.span, "cannot index type map");
+                }
+
+                // Index type: reject obvious non-int literals.
+                match &index.kind {
+                    ExprKind::FloatLit(_) => {
+                        self.error(&index.span, "array index must be int, got float");
+                    }
+                    ExprKind::StringLit(_) | ExprKind::RawStringLit(_) => {
+                        self.error(&index.span, "array index must be int, got str");
+                    }
+                    ExprKind::BoolLit(_) => {
+                        self.error(&index.span, "array index must be int, got bool");
+                    }
+                    ExprKind::Identifier(name) => {
+                        if let Some(info) = self.lookup_var(name) {
+                            if info.type_ref.is_array
+                                || !matches!(
+                                    info.type_ref.base,
+                                    TypeBase::Primitive(PrimitiveType::Int)
+                                )
+                            {
+                                let ty_str = format_type_ref(&info.type_ref);
+                                self.error(
+                                    &index.span,
+                                    format!("array index must be int, got {ty_str}"),
+                                );
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
             ExprKind::Call { target, args, config } => {
                 self.check_expr(target);
                 for arg in args {
@@ -534,7 +611,7 @@ impl CheckCtx {
 
     fn is_known_namespace(&self, name: &str) -> bool {
         matches!(name,
-            "platform" | "fs" | "vcs" | "test"
+            "platform" | "fs" | "vcs" | "test" | "string"
             | "invoke" | "parallel" | "consensus"
             | "elaborate" | "distill" | "validate" | "convert" | "aggregate"
             | "run"

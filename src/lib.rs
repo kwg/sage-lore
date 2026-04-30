@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
-//! SAGE Method - Security-Aware Generation Engine
+//! sage-lore — LLM ORchestration Engine for the SAGE method.
 //!
-//! The SAGE Method engine enforces security policy during code generation.
-//! It does NOT define security policy - each project declares its own
+//! SAGE = Stateless Agent Guidance Engine. LORE = LLM ORchestration Engine.
+//! sage-lore executes scrolls (deterministic LLM workflows) by dispatching
+//! primitives (fs, vcs, invoke, platform, test, secure, string, …) and
+//! orchestrating agent calls.
+//!
+//! Security policy is enforced, not defined: each project declares its own
 //! requirements in `.sage-lore/security/policy.yaml`.
 //!
 //! # Philosophy

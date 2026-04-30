@@ -298,6 +298,11 @@ pub enum ExprKind {
         object: Box<Expr>,
         field: String,
     },
+    /// Index access: `arr[i]`
+    IndexAccess {
+        object: Box<Expr>,
+        index: Box<Expr>,
+    },
     /// Function/method call: `platform.get_issue(number: 1)`
     Call {
         target: Box<Expr>,

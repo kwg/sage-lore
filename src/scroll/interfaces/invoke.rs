@@ -113,15 +113,28 @@ impl InterfaceDispatch for InvokeInterface {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
+                // Parse thinking flag from params. When set, the caller is requesting
+                // reasoning-mode output from the backend. The dispatch path itself does
+                // not orchestrate the two-call pattern — that lives in InterfaceRegistry::
+                // invoke_agent (one layer up), where output_schema is also visible.
+                let thinking = params.as_ref()
+                    .and_then(|p| p.get("thinking"))
+                    .and_then(|v| v.as_bool());
+
+                // Timeout policy: non-thinking calls cap at 1200s. Thinking calls may
+                // legitimately need longer (long reasoning traces) — cap raised to 7200s.
+                let timeout_cap = if thinking == Some(true) { 7200 } else { 1200 };
+
                 let request = crate::primitives::invoke::LlmRequest {
                     prompt: prompt.to_string(),
                     system,
                     max_tokens: None,
                     temperature: None,
-                    timeout_secs: timeout_secs.map(|s| s.min(1200)),
+                    timeout_secs: timeout_secs.map(|s| s.min(timeout_cap)),
                     model_tier,
                     format_schema,
                     model,
+                    thinking,
                 };
 
                 let response = match &self.backend {

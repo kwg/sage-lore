@@ -289,6 +289,12 @@ impl InterfaceRegistry {
     ///
     /// If `backend_override` is Some("claude") or Some("ollama"), routes to that
     /// specific backend instead of the default.
+    ///
+    /// When `thinking == Some(true)` AND `output_schema` is set, this orchestrates
+    /// a two-call pattern: a thinking-mode call produces free-form reasoning + answer,
+    /// then a cheap-tier extraction call converts that text into schema-conforming JSON.
+    /// Both calls are observable as separate trace events. See #188.
+    #[allow(clippy::too_many_arguments)]
     pub async fn invoke_agent(
         &self,
         agent: &str,
@@ -298,6 +304,7 @@ impl InterfaceRegistry {
         timeout_secs: Option<u64>,
         backend_override: Option<&str>,
         output_schema: Option<&serde_json::Value>,
+        thinking: Option<bool>,
     ) -> Result<serde_json::Value, ExecutionError> {
         // Build user message from instructions + context
         let mut user_message = instructions.to_string();
@@ -312,28 +319,50 @@ impl InterfaceRegistry {
             }
         }
 
-        // Inject output_schema so the LLM sees the exact schema it's validated against
+        // Inject output_schema so the LLM sees the exact schema it's validated against.
+        // For thinking calls this is guidance only — GBNF enforcement is dropped below.
         if let Some(schema) = output_schema {
             user_message.push_str("\n\nRequired output JSON schema (use exact field names):\n");
             user_message.push_str(&serde_json::to_string_pretty(schema).unwrap_or_default());
         }
 
-        // Build params mapping with system prompt
+        // Two-call thinking + schema path (#188): first call gets reasoning,
+        // second call extracts structured JSON via a cheap-tier model.
+        if let (Some(true), Some(schema)) = (thinking, output_schema) {
+            return self.invoke_agent_thinking_with_extraction(
+                agent,
+                system_prompt,
+                &user_message,
+                timeout_secs,
+                backend_override,
+                schema,
+            ).await;
+        }
+
+        // Build params mapping with system prompt (single-call path)
         let mut mapping = serde_json::Map::new();
         mapping.insert("agent".to_string(), serde_json::Value::String(agent.to_string()));
         mapping.insert("prompt".to_string(), serde_json::Value::String(user_message));
         mapping.insert("system".to_string(), serde_json::Value::String(system_prompt.to_string()));
         if let Some(secs) = timeout_secs {
-            let clamped = secs.min(1200);
+            // Thinking calls may legitimately need longer than 1200s; cap raised
+            // to 7200s in that case. Non-thinking keeps the historical 1200s cap.
+            let cap = if thinking == Some(true) { 7200 } else { 1200 };
+            let clamped = secs.min(cap);
             mapping.insert(
                 "timeout_secs".to_string(),
                 serde_json::Value::Number(serde_json::Number::from(clamped)),
             );
         }
 
-        // Pass output_schema as format_schema for Ollama's constrained decoding
+        // Pass output_schema as format_schema for Ollama's constrained decoding.
+        // Thinking calls without a schema skip this — that's the expected case
+        // for free-form reasoning where the caller doesn't need structured output.
         if let Some(schema) = output_schema {
             mapping.insert("format_schema".to_string(), schema.clone());
+        }
+        if let Some(t) = thinking {
+            mapping.insert("thinking".to_string(), serde_json::Value::Bool(t));
         }
 
         let params = serde_json::to_value(mapping).ok();
@@ -348,6 +377,100 @@ impl InterfaceRegistry {
         }
 
         self.invoke.dispatch("generate", &params).await
+    }
+
+    /// Two-call orchestration for thinking-mode invokes that need structured output (#188).
+    ///
+    /// Call A: thinking-mode invoke, format constraint dropped, free-form reasoning + answer.
+    /// Call B: cheap-tier extraction, format_schema enforced, prompt = "extract JSON from text".
+    ///
+    /// Backend-agnostic — works for any backend that supports `thinking` and `format_schema`.
+    /// Both calls log distinctly so traces show what happened.
+    async fn invoke_agent_thinking_with_extraction(
+        &self,
+        agent: &str,
+        system_prompt: &str,
+        user_message: &str,
+        timeout_secs: Option<u64>,
+        backend_override: Option<&str>,
+        output_schema: &serde_json::Value,
+    ) -> Result<serde_json::Value, ExecutionError> {
+        // ---- Call A: thinking-mode reasoning ----
+        tracing::info!(agent = %agent, phase = "think", "Two-call thinking-mode: reasoning pass");
+
+        let mut think_params = serde_json::Map::new();
+        think_params.insert("agent".to_string(), serde_json::Value::String(agent.to_string()));
+        think_params.insert("prompt".to_string(), serde_json::Value::String(user_message.to_string()));
+        think_params.insert("system".to_string(), serde_json::Value::String(system_prompt.to_string()));
+        think_params.insert("thinking".to_string(), serde_json::Value::Bool(true));
+        // No format_schema — thinking call is free-form.
+        if let Some(secs) = timeout_secs {
+            think_params.insert(
+                "timeout_secs".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(secs.min(7200))),
+            );
+        }
+        let think_params_value = serde_json::to_value(think_params).ok();
+
+        let think_result = if let Some(backend_name) = backend_override {
+            if let Some(backend) = self.invoke_backends.get(backend_name) {
+                backend.dispatch("generate", &think_params_value).await?
+            } else {
+                tracing::warn!(backend = %backend_name, "Backend override not found, using default");
+                self.invoke.dispatch("generate", &think_params_value).await?
+            }
+        } else {
+            self.invoke.dispatch("generate", &think_params_value).await?
+        };
+
+        let think_text = think_result.as_str().unwrap_or("").to_string();
+        tracing::info!(
+            agent = %agent,
+            phase = "think",
+            response_len = think_text.len(),
+            "Two-call thinking-mode: reasoning complete"
+        );
+
+        // ---- Call B: cheap-tier structured extraction ----
+        tracing::info!(agent = %agent, phase = "extract", "Two-call thinking-mode: extraction pass");
+
+        let extract_prompt = format!(
+            "The following text contains an answer produced by a reasoning model. \
+             It may include thinking-out-loud, multiple drafts, or commentary. \
+             Extract a single JSON object that conforms to the requested schema. \
+             Output ONLY the JSON object — no markdown fences, no commentary.\n\n\
+             ----- BEGIN ANSWER TEXT -----\n{}\n----- END ANSWER TEXT -----",
+            think_text
+        );
+
+        let mut extract_params = serde_json::Map::new();
+        extract_params.insert("prompt".to_string(), serde_json::Value::String(extract_prompt));
+        extract_params.insert("model_tier".to_string(), serde_json::Value::String("cheap".to_string()));
+        extract_params.insert("format_schema".to_string(), output_schema.clone());
+        // Extraction gets a tight per-call timeout — it's structured, not reasoning.
+        extract_params.insert(
+            "timeout_secs".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(120u64)),
+        );
+        let extract_params_value = serde_json::to_value(extract_params).ok();
+
+        let extract_result = if let Some(backend_name) = backend_override {
+            if let Some(backend) = self.invoke_backends.get(backend_name) {
+                backend.dispatch("generate", &extract_params_value).await?
+            } else {
+                self.invoke.dispatch("generate", &extract_params_value).await?
+            }
+        } else {
+            self.invoke.dispatch("generate", &extract_params_value).await?
+        };
+
+        tracing::info!(
+            agent = %agent,
+            phase = "extract",
+            "Two-call thinking-mode: extraction complete"
+        );
+
+        Ok(extract_result)
     }
 
     /// Generate text from a prompt (for core primitives).
@@ -421,5 +544,128 @@ impl InterfaceRegistry {
 impl Default for InterfaceRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod thinking_tests {
+    use super::*;
+    use crate::primitives::invoke::MockLlmBackend;
+
+    /// When `thinking: true` and an output_schema is provided, invoke_agent must
+    /// orchestrate a two-call pattern: free-form thinking pass, then cheap-tier
+    /// extraction. Both calls hit the same backend; this test verifies both
+    /// happened and that extraction's response is what bubbles back. (#188)
+    #[tokio::test]
+    async fn invoke_agent_two_call_when_thinking_and_schema() {
+        let mock = MockLlmBackend::new()
+            .with_substring_responses(vec![
+                // Thinking pass — matches the user_message we pass.
+                ("REASONING_TASK_MARKER".to_string(),
+                 "Lots of reasoning ... final answer is {x:1}".to_string()),
+                // Extraction pass — matches the engine-owned extraction prompt.
+                ("BEGIN ANSWER TEXT".to_string(),
+                 "{\"x\":1}".to_string()),
+            ]);
+        let mock_arc = Arc::new(mock);
+        let mut registry = InterfaceRegistry::new();
+        registry.set_invoke_backend(mock_arc.clone());
+
+        let schema = serde_json::json!({"type":"object","properties":{"x":{"type":"integer"}}});
+        let result = registry.invoke_agent(
+            "test-agent",
+            "system",
+            "REASONING_TASK_MARKER do the work",
+            &[],
+            None,
+            None,
+            Some(&schema),
+            Some(true),
+        ).await.expect("two-call orchestration succeeds");
+
+        let calls = mock_arc.calls();
+        assert_eq!(calls.len(), 2, "expected exactly two backend calls");
+        assert_eq!(calls[0].thinking, Some(true), "first call must be thinking-mode");
+        assert!(calls[0].format_schema.is_none(), "thinking call must drop format constraint");
+        assert!(
+            calls[1].thinking != Some(true),
+            "extraction call must NOT be thinking-mode"
+        );
+        assert!(calls[1].format_schema.is_some(), "extraction call must carry the schema");
+        assert_eq!(
+            calls[1].model_tier,
+            Some(crate::primitives::invoke::ModelTier::Cheap),
+            "extraction must run on cheap tier"
+        );
+        assert!(
+            calls[1].prompt.contains("BEGIN ANSWER TEXT"),
+            "extraction prompt must wrap the thinking call's output"
+        );
+        assert!(
+            calls[1].prompt.contains("Lots of reasoning"),
+            "extraction prompt must include the thinking call's response text"
+        );
+
+        assert_eq!(result.as_str(), Some("{\"x\":1}"));
+    }
+
+    /// `thinking: true` without a schema should be a single-call pass-through —
+    /// no extraction stage, the request just gets the thinking flag set.
+    #[tokio::test]
+    async fn invoke_agent_single_call_when_thinking_without_schema() {
+        let mock = Arc::new(MockLlmBackend::new()
+            .with_default_response(crate::primitives::invoke::LlmResponse {
+                text: "free-form answer".to_string(),
+                tokens_used: None,
+                model: "mock".to_string(),
+                truncated: false,
+            }));
+
+        let mut registry = InterfaceRegistry::new();
+        registry.set_invoke_backend(mock.clone());
+
+        let result = registry.invoke_agent(
+            "test-agent",
+            "system",
+            "instructions",
+            &[],
+            None,
+            None,
+            None,
+            Some(true),
+        ).await.expect("single-call thinking succeeds");
+
+        let calls = mock.calls();
+        assert_eq!(calls.len(), 1, "no extraction stage when schema is absent");
+        assert_eq!(calls[0].thinking, Some(true));
+        assert!(calls[0].format_schema.is_none());
+        assert_eq!(result.as_str(), Some("free-form answer"));
+    }
+
+    /// Regression guard: `thinking: None` (the default) must NOT trigger
+    /// two-call orchestration even when a schema is present. The historical
+    /// single-call path with format_schema enforcement must still work.
+    #[tokio::test]
+    async fn invoke_agent_single_call_when_no_thinking_flag() {
+        let mock = Arc::new(MockLlmBackend::new()
+            .with_default_response(crate::primitives::invoke::LlmResponse {
+                text: "{\"x\":1}".to_string(),
+                tokens_used: None,
+                model: "mock".to_string(),
+                truncated: false,
+            }));
+
+        let mut registry = InterfaceRegistry::new();
+        registry.set_invoke_backend(mock.clone());
+
+        let schema = serde_json::json!({"type":"object"});
+        let _ = registry.invoke_agent(
+            "test-agent", "system", "instructions", &[], None, None,
+            Some(&schema), None,
+        ).await.expect("single-call non-thinking succeeds");
+
+        assert_eq!(mock.calls().len(), 1);
+        assert!(mock.calls()[0].format_schema.is_some());
+        assert!(mock.calls()[0].thinking.is_none());
     }
 }

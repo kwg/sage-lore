@@ -689,6 +689,7 @@ fn ast_all_corpus_files_parse_to_ast() {
         ("test_full_example", include_str!("../../../tests/scroll_corpus/test_full_example.scroll")),
         ("test_match_complex", include_str!("../../../tests/scroll_corpus/test_match_complex.scroll")),
         ("test_inline_provide", include_str!("../../../tests/scroll_corpus/test_inline_provide.scroll")),
+        ("test_index_access", include_str!("../../../tests/scroll_corpus/test_index_access.scroll")),
     ];
     for (name, source) in files {
         parser::parse(source, &format!("{name}.scroll")).unwrap_or_else(|diags| {
@@ -895,6 +896,7 @@ fn tc_all_corpus_type_check_subset() {
         ("test_types", include_str!("../../../tests/scroll_corpus/test_types.scroll")),
         ("test_full_example", include_str!("../../../tests/scroll_corpus/test_full_example.scroll")),
         ("test_inline_provide", include_str!("../../../tests/scroll_corpus/test_inline_provide.scroll")),
+        ("test_index_access", include_str!("../../../tests/scroll_corpus/test_index_access.scroll")),
     ];
     for (name, source) in files {
         let ast = parser::parse(source, &format!("{name}.scroll")).unwrap();
@@ -1072,4 +1074,199 @@ async fn dispatch_missing_require_errors() {
     let inputs = std::collections::HashMap::new();
     let result = dispatch::execute(&ast, &mut executor, inputs).await;
     assert!(result.is_err());
+}
+
+// ============================================================================
+// Index Access — parser, typechecker, evaluator
+// ============================================================================
+
+#[test]
+fn ast_index_access_simple() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Index";
+    require arr: int[];
+    provide first: int;
+    set first: int = arr[0];
+}"#);
+    if let Statement::SetDecl(sd) = &ast.scroll.body.statements[0] {
+        assert!(matches!(sd.value.kind, ExprKind::IndexAccess { .. }));
+    } else {
+        panic!("Expected SetDecl");
+    }
+}
+
+#[test]
+fn ast_index_access_expression_index() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Index expr";
+    require arr: int[];
+    require n: int;
+    provide last: int;
+    set last: int = arr[n - 1];
+}"#);
+    if let Statement::SetDecl(sd) = &ast.scroll.body.statements[0] {
+        if let ExprKind::IndexAccess { index, .. } = &sd.value.kind {
+            assert!(matches!(index.kind, ExprKind::BinaryOp { .. }));
+        } else {
+            panic!("Expected IndexAccess");
+        }
+    } else {
+        panic!("Expected SetDecl");
+    }
+}
+
+#[test]
+fn ast_index_after_field() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Field then index";
+    require obj: map;
+    provide x: int;
+    set x: int = obj.field[0];
+}"#);
+    if let Statement::SetDecl(sd) = &ast.scroll.body.statements[0] {
+        if let ExprKind::IndexAccess { object, .. } = &sd.value.kind {
+            assert!(matches!(object.kind, ExprKind::FieldAccess { .. }));
+        } else {
+            panic!("Expected IndexAccess");
+        }
+    }
+}
+
+#[test]
+fn ast_field_after_index() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Index then field";
+    require arr: map;
+    provide x: int;
+    set x: int = arr[0].field;
+}"#);
+    if let Statement::SetDecl(sd) = &ast.scroll.body.statements[0] {
+        if let ExprKind::FieldAccess { object, .. } = &sd.value.kind {
+            assert!(matches!(object.kind, ExprKind::IndexAccess { .. }));
+        } else {
+            panic!("Expected FieldAccess");
+        }
+    }
+}
+
+#[test]
+fn ast_index_after_call() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Call then index";
+    provide x: int;
+    set x: int = f()[0];
+}"#);
+    if let Statement::SetDecl(sd) = &ast.scroll.body.statements[0] {
+        if let ExprKind::IndexAccess { object, .. } = &sd.value.kind {
+            assert!(matches!(object.kind, ExprKind::Call { .. }));
+        } else {
+            panic!("Expected IndexAccess");
+        }
+    }
+}
+
+#[test]
+fn ast_nested_index() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Nested index";
+    require grid: int;
+    provide x: int;
+    set x: int = grid[0][1];
+}"#);
+    if let Statement::SetDecl(sd) = &ast.scroll.body.statements[0] {
+        if let ExprKind::IndexAccess { object, .. } = &sd.value.kind {
+            assert!(matches!(object.kind, ExprKind::IndexAccess { .. }));
+        } else {
+            panic!("Expected outer IndexAccess");
+        }
+    }
+}
+
+#[test]
+fn tc_index_non_array_errors() {
+    let errs = check_errors(r#"scroll "test" {
+    description: "Index non-array";
+    require n: int;
+    provide x: int;
+    set x: int = n[0];
+}"#);
+    assert!(errs.iter().any(|e| e.message.contains("cannot index")), "got: {errs:?}");
+}
+
+#[test]
+fn tc_index_non_int_errors() {
+    let errs = check_errors(r#"scroll "test" {
+    description: "Index with str";
+    require arr: int[];
+    provide x: int;
+    set x: int = arr["nope"];
+}"#);
+    assert!(errs.iter().any(|e| e.message.contains("array index must be int")), "got: {errs:?}");
+}
+
+#[test]
+fn tc_index_array_clean() {
+    let errs = check_errors(r#"scroll "test" {
+    description: "Index ok";
+    require arr: int[];
+    provide x: int;
+    x = arr[0];
+}"#);
+    assert!(errs.is_empty(), "expected clean, got: {errs:?}");
+}
+
+#[tokio::test]
+async fn dispatch_index_literal_array() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "Index literal";
+    provide x: int;
+    set x: int = [10, 20, 30][1];
+}"#);
+    let mut executor = crate::scroll::executor::Executor::for_testing();
+    let outputs = dispatch::execute(&ast, &mut executor, std::collections::HashMap::new()).await.unwrap();
+    assert_eq!(outputs.get("x"), Some(&serde_json::json!(20)));
+}
+
+#[tokio::test]
+async fn dispatch_index_with_expression() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "lines[n-1]";
+    require lines: str[];
+    require n: int;
+    provide last: str;
+    set last: str = lines[n - 1];
+}"#);
+    let mut executor = crate::scroll::executor::Executor::for_testing();
+    let mut inputs = std::collections::HashMap::new();
+    inputs.insert("lines".to_string(), serde_json::json!(["a", "b", "c"]));
+    inputs.insert("n".to_string(), serde_json::json!(3));
+    let outputs = dispatch::execute(&ast, &mut executor, inputs).await.unwrap();
+    assert_eq!(outputs.get("last"), Some(&serde_json::json!("c")));
+}
+
+#[tokio::test]
+async fn dispatch_index_oob_errors() {
+    let ast = parse_to_ast(r#"scroll "test" {
+    description: "OOB";
+    provide x: int;
+    set x: int = [1, 2][5];
+}"#);
+    let mut executor = crate::scroll::executor::Executor::for_testing();
+    let result = dispatch::execute(&ast, &mut executor, std::collections::HashMap::new()).await;
+    let err = result.expect_err("expected OOB error");
+    let msg = err.to_string();
+    assert!(msg.contains("out of bounds"), "got: {msg}");
+}
+
+#[tokio::test]
+async fn dispatch_index_access_fixture() {
+    let src = include_str!("../../../tests/scroll_corpus/test_index_access.scroll");
+    let ast = parse_to_ast(src);
+    let mut executor = crate::scroll::executor::Executor::for_testing();
+    let mut inputs = std::collections::HashMap::new();
+    inputs.insert("lines".to_string(), serde_json::json!(["alpha", "beta", "gamma", "delta"]));
+    inputs.insert("n".to_string(), serde_json::json!(4));
+    let outputs = dispatch::execute(&ast, &mut executor, inputs).await.unwrap();
+    assert_eq!(outputs.get("first_line"), Some(&serde_json::json!("alpha")));
+    assert_eq!(outputs.get("last_line"), Some(&serde_json::json!("delta")));
 }

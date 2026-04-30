@@ -188,14 +188,14 @@ async fn test_platform_config() {
     let config_content = r#"
 platform:
   provider: forgejo
-  url: "http://10.1.50.12:3000"
-  repo: "kai/sage-lore"
+  url: "https://forgejo.example.com"
+  repo: "owner/repo"
   token_env: "MY_CUSTOM_TOKEN"
 "#;
     fs::write(sage_dir.join("config.yaml"), config_content).unwrap();
 
     let config = ConfigLoader::load_from_project(temp.path()).unwrap();
-    assert_eq!(config.platform_url(), Some("http://10.1.50.12:3000"));
-    assert_eq!(config.platform_repo(), Some("kai/sage-lore"));
+    assert_eq!(config.platform_url(), Some("https://forgejo.example.com"));
+    assert_eq!(config.platform_repo(), Some("owner/repo"));
     assert_eq!(config.platform_token_env(), Some("MY_CUSTOM_TOKEN"));
 }

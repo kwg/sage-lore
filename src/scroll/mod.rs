@@ -5,6 +5,7 @@
 
 pub mod agent_registry;
 pub mod assembly;
+pub mod builtins;
 pub mod concurrent;
 pub mod consensus;
 pub mod context;

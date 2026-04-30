@@ -32,6 +32,7 @@ mod tests {
                 model_tier: None,
                 model: None,
                 output_schema: None,
+                thinking: None,
             },
             output: Some("result".to_string()),
             on_fail: Default::default(),
@@ -44,6 +45,66 @@ mod tests {
         // Check that result was stored
         let output = executor.context().get_variable("result");
         assert!(output.is_some());
+    }
+
+    /// Schema-validation retry regression (#192). When `output_schema` is set and
+    /// the first response fails extraction, execute_invoke must retry up to 3
+    /// times, append validation feedback to the instructions on retry, and
+    /// succeed if a later attempt produces a schema-conforming object.
+    #[tokio::test]
+    async fn invoke_retries_on_schema_extraction_failure() {
+        // Substring-match order: "VALIDATION FAILURES" wins on retries; everything
+        // else hits the missing-field response on the first attempt.
+        let mut executor = Executor::for_testing_with_llm_responses(vec![
+            (
+                "VALIDATION FAILURES".to_string(),
+                r#"{"misconception_id":"M1","sources":["a.py"]}"#.to_string(),
+            ),
+            (
+                "extract".to_string(),
+                r#"{"misconception_id":"M1"}"#.to_string(),
+            ),
+        ]);
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["misconception_id", "sources"],
+            "properties": {
+                "misconception_id": {"type": "string"},
+                "sources": {"type": "array", "items": {"type": "string"}}
+            }
+        });
+
+        let step = Step::Invoke(InvokeStep {
+            invoke: crate::scroll::schema::InvokeParams {
+                agent: "test-agent".to_string(),
+                instructions: "extract misconception".to_string(),
+                context: None,
+                timeout_secs: None,
+                backend: None,
+                model_tier: None,
+                model: None,
+                output_schema: Some(schema),
+                thinking: None,
+            },
+            output: Some("result".to_string()),
+            on_fail: Default::default(),
+        });
+
+        let result = executor.execute_step(&step).await;
+        assert!(result.is_ok(), "expected retry to recover, got: {:?}", result.err());
+
+        let output = executor.context().get_variable("result").cloned()
+            .expect("result variable set");
+        assert_eq!(
+            output.get("misconception_id").and_then(|v| v.as_str()),
+            Some("M1"),
+            "retried response should be bound as the final result"
+        );
+        assert!(
+            output.get("sources").is_some(),
+            "retried response should include the previously-missing 'sources' field"
+        );
     }
 
     #[tokio::test]
@@ -579,6 +640,7 @@ mod tests {
                             model_tier: None,
                             model: None,
                             output_schema: None,
+                            thinking: None,
                         },
                         output: Some("result1".to_string()),
                         on_fail: Default::default(),
@@ -593,6 +655,7 @@ mod tests {
                             model_tier: None,
                             model: None,
                             output_schema: None,
+                            thinking: None,
                         },
                         output: Some("result2".to_string()),
                         on_fail: Default::default(),
@@ -640,6 +703,7 @@ mod tests {
                             model_tier: None,
                             model: None,
                             output_schema: None,
+                            thinking: None,
                         },
                         output: Some("result1".to_string()),
                         on_fail: Default::default(),
@@ -676,6 +740,7 @@ mod tests {
                             model_tier: None,
                             model: None,
                             output_schema: None,
+                            thinking: None,
                         },
                         output: Some("result1".to_string()),
                         on_fail: Default::default(),
@@ -724,6 +789,7 @@ mod tests {
                             model_tier: None,
                             model: None,
                             output_schema: None,
+                            thinking: None,
                         },
                         output: Some("result1".to_string()),
                         on_fail: Default::default(),
@@ -760,6 +826,7 @@ mod tests {
                             model_tier: None,
                             model: None,
                             output_schema: None,
+                            thinking: None,
                         },
                         output: Some("result1".to_string()),
                         on_fail: Default::default(),

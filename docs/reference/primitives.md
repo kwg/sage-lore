@@ -172,7 +172,6 @@ convert(input: raw_text, to: "json", schema: {
 ---
 
 ## System Primitives (5)
-
 Interact with the external environment.
 
 ### fs
@@ -262,6 +261,48 @@ run("./local-scroll.scroll") -> result: map;
 
 ---
 
+## Pure Builtins (1)
+
+Deterministic, side-effect-free functions. No backend, no LLM call, no I/O. Same input always produces the same output.
+
+### string
+
+Deterministic string operations. Use these instead of `convert(...)` for any computation that is mechanical (split, join, case fold, substring check). Removes stochastic variance from the pipeline.
+
+```
+string.line(input: code, n: 5) -> str;            // 1-indexed line by '\n'
+string.split(input: code, separator: "\n") -> str[];
+string.join(parts: ["a", "b"], separator: ",") -> str;
+string.lines(input: code) -> str[];               // shorthand for split on '\n'
+string.trim(input: " hi ") -> str;
+string.lower(input: "ABC") -> str;
+string.upper(input: "abc") -> str;
+string.contains(input: code, needle: "TODO") -> bool;
+string.replace(input: code, from: "foo", to: "bar") -> str;
+```
+
+**Operations**: `line`, `split`, `join`, `lines`, `trim`, `lower`, `upper`, `contains`, `replace`
+
+**Errors**: `string.line` errors on out-of-bounds index. `string.split` errors on empty separator. Type mismatches (e.g. `string.line(input: 5, n: 1)`) error at runtime.
+
+**When to use**: any time a scroll needs to extract, transform, or inspect text in a way that does not require natural-language understanding. `string.line(code, n)` replaces the fragile `convert(input: code, to: "prose") { context: "Return only line N..." }` pattern (#190).
+
+### Array indexing
+
+Arrays support 0-indexed access via `arr[i]`. The index expression must be `int`. Out-of-bounds and negative indices error at runtime. Indexing composes with field access and method chains:
+
+```
+set lines: str[] = string.split(input: code, separator: "\n");
+set first: str = lines[0];
+set target: str = lines[target_line - 1];
+set field: str = obj.children[0].name;
+set head: str = list_items()[0];
+```
+
+Strings are not directly indexable — use `string.line` or `string.split` first.
+
+---
+
 ## Agent Operations (4)
 
 Invoke and coordinate LLM agents.
@@ -287,8 +328,24 @@ invoke(agent: "dev", instructions: "Implement chunk {chunk.number}") {
 - `tier`: `cheap`, `standard`, `premium` (maps to configured models)
 - `model`: Explicit model name (overrides tier)
 - `timeout`: Seconds before timeout
+- `thinking`: `true` to request reasoning-mode output. See [Reasoning Models](#reasoning-models) below.
 
 **Backends**: `ClaudeCliBackend` (production, `claude -p`), `OllamaBackend` (local LLMs), `MockLlmBackend` (testing)
+
+**Reasoning-mode example** (qwen3.x, deepseek-thinking, etc.):
+
+```
+invoke(agent: "cs-question-writer", instructions: "Generate a problem matching the schema.") {
+    schema: ProblemArtifact,
+    model: "qwen3.5:27b",
+    thinking: true,
+    timeout: 1800,
+} -> problem: map;
+```
+
+When `thinking: true` is set alongside a `schema`, the engine runs a two-call pattern: the reasoning model produces free-form thinking + answer, then a cheap-tier model extracts schema-conforming JSON from that text. Both calls appear in traces (`phase=think`, `phase=extract`).
+
+**Schema retries**: when a `schema` is set and the response fails extraction (missing required field, markdown-fenced output, parse error), the invoke retries up to 3 times. On retry, the validation error is appended to the instructions under a `## VALIDATION FAILURES FROM PRIOR ATTEMPTS` header so the model sees what was wrong. Retry attempts log at warn level with `attempt`, `max_attempts`, and `error` fields. No-schema invokes keep single-attempt semantics.
 
 ---
 
@@ -483,6 +540,41 @@ invoke(agent: "dev", instructions: "...") { tier: premium; } -> impl: map;
 - `cheap`: haiku (Claude) / phi4-mini (Ollama)
 - `standard`: sonnet (Claude) / qwen2.5-coder:32b (Ollama)
 - `premium`: opus (Claude) / deepseek-r1:32b (Ollama)
+
+### Reasoning Models
+
+OSS reasoning models (qwen3.x, deepseek-thinking variants) emit a long internal
+reasoning trace to a separate `thinking` channel before producing a final answer.
+Schema-constrained decoding (`format: json`, GBNF grammars) fights this channel
+and routinely produces empty or truncated output. Set `thinking: true` on the
+invoke step to opt into reasoning-mode handling.
+
+When `thinking: true` is set, the Ollama backend:
+
+- Drops the `format` constraint so reasoning is free-form.
+- Raises `num_predict` floor to 32768 (reasoning traces are long).
+- Raises the per-call timeout floor to 1200s.
+- Warns when `done_reason: length` trips with empty `response` (the model ran
+  out of token budget mid-reasoning).
+
+**Output budget for non-thinking calls**: the Ollama backend's default
+`num_predict` is 262144 (256k). Harmony / gpt-oss models reason in prose
+before structured output and need headroom; the cap acts as an upper bound,
+not a target — short outputs still terminate normally via the model's own
+end-of-sequence logic.
+
+When `thinking: true` is set alongside a `schema`, the invoke interface
+orchestrates a backend-agnostic two-call pattern: the reasoning model produces
+free-form text, then a cheap-tier model extracts a schema-conforming JSON
+object. Both calls log distinctly so traces show what happened.
+
+If a scroll wants free-form reasoning output (no JSON), set `thinking: true`
+without a `schema` — the engine takes the single-call path and returns the
+raw text.
+
+**Note**: thinking-mode currently applies to the Ollama backend. Anthropic
+extended-thinking on the Claude backend has a different shape and is out of
+scope for this flag.
 
 ---
 
